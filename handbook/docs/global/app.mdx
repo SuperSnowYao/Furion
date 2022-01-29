@@ -19,12 +19,15 @@ var value = configuration["xxx:xxx"];
 
 // 获取指定节点值并转成 T 类型
 var data = App.GetConfig<TConfig>("key:key2");
+
+// 重载/刷新配置（v2.17+ 版本已移除）
+App.Configuration.Reload();
 ```
 
 ## 1.3 获取环境对象
 
 ```cs
-var webHostEnvironment = App.WebHostEnvironment;
+var webHostEnvironment = App.HostEnvironment;
 ```
 
 ## 1.4 获取项目所有程序集
@@ -95,7 +98,7 @@ App.PrintToMiniProfiler("分类", "状态", "要打印的消息");
 var applicationName = App.HostEnvironment.ApplicationName;
 ```
 
-## 1.13 获取网站根目录
+## 1.13 获取启动项目根目录
 
 ```cs
 var webRootPath = App.HostEnvironment.ContentRootPath;
@@ -157,4 +160,16 @@ var processArchitecture = RuntimeInformation.ProcessArchitecture;   // => X64
 
 // 是否是64位操作系统
 var is64BitOperatingSystem = Environment.Is64BitOperatingSystem;    // => True
+```
+
+## 1.20 获取框架底层所有未托管对象
+
+```cs
+var objs = App.UnmanagedObjects;
+```
+
+## 1.21 手动释放非托管对象
+
+```cs
+App.DisposeUnmanagedObjects();  // 通常在非 `Web` 环境中手动处理释放时机
 ```

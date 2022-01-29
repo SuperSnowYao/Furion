@@ -16,7 +16,7 @@ module.exports = {
     {
       type: "category",
       label: "2. 入门指南",
-      items: ["get-start", "template", "reference", "inject"],
+      items: ["get-start", "get-start-net6", "template", "reference", "inject"],
     },
     {
       type: "doc",
@@ -170,22 +170,30 @@ module.exports = {
     },
     {
       type: "doc",
-      id: "microservice",
+      id: "sesssion-state",
+    },
+    {
+      type: "doc",
+      id: "ipc",
     },
     {
       type: "category",
-      label: "33. 托管部署",
+      label: "34. 托管部署",
       items: ["deploy-iis", "deploy-docker", "deploy-nginx", "virtual-deploy"],
     },
     {
       type: "category",
-      label: "34. 持续部署集成",
+      label: "35. 持续部署集成",
       items: ["deploy-docker-auto", "devops"],
     },
     {
       type: "category",
-      label: "35. 测试指南",
-      items: ["unittest", "performance", "benchmark"],
+      label: "36. 测试指南",
+      items: ["unittest", "performance", "benchmark", "bingfa"],
+    },
+    {
+      type: "doc",
+      id: "dotnet-tools",
     },
     {
       type: "doc",
@@ -228,6 +236,10 @@ module.exports = {
     {
       type: "doc",
       id: "settings/jwtsettings",
+    },
+    {
+      type: "doc",
+      id: "settings/unifyresultsettings",
     },
   ],
   global: [
@@ -282,6 +294,10 @@ module.exports = {
     {
       type: "doc",
       id: "global/fs",
+    },
+    {
+      type: "doc",
+      id: "global/jwt",
     },
   ],
 };

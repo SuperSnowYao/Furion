@@ -4,6 +4,12 @@ title: 9.3 数据库实体
 sidebar_label: 9.3 数据库实体
 ---
 
+:::important 特别提醒
+
+一旦定义了实体或改变了实体结构或实体配置，需要重新执行 `Add-Migration` 和 `Update-Database` 命令。
+
+:::
+
 ## 9.3.1 数据库实体
 
 在面向对象开发思想中，最重要尤为**对象**二字，在 .NET 开发过去，操作数据库往往采用 `DataTable` 和 `DataSet` 来接收数据库返回结果集，而操作数据库也离不开手写 `sql` 语句。
@@ -32,7 +38,7 @@ sidebar_label: 9.3 数据库实体
 - `IEntity`：实体基接口，是所有实体的基接口
 - `IEntityNotKey`：无键实体接口，也就是视图、存储过程、函数依赖接口
 - `EntityBase`：实体基抽象类，内置了 `Id`，`TenantId` 字段
-- `Entity`：实体通用抽象类，继承自 `EntityBase`，同时内置 `CreatedTime`，`UpdatedTime`，`IsDeleted` 字段
+- `Entity`：实体通用抽象类，继承自 `EntityBase`，同时内置 `CreatedTime`，`UpdatedTime` 字段
 - `EntityNotKey`：无键实体抽象类，视图、存储过程、函数依赖抽象类
 
 :::important 实体定义位置
@@ -99,7 +105,7 @@ namespace Furion.Core
     public class User : Entity
     {
         // 无需定义 Id 属性
-        // 并自动添加 CreatedTime，UpdateTime，IsDeleted 属性
+        // 并自动添加 CreatedTime，UpdatedTime 属性
 
         /// <summary>
         /// 名称
@@ -325,7 +331,7 @@ namespace Furion.Core
 
 `Furion` 框架会自动扫描所有继承 `IEntity` 接口的类进行 `DbSet<TEntity>` 注册，也就是实现自动配置 `DbContext` 的 `OnModelCreating`。
 
-如果需要跳过自动注册，只需要贴 `[NonAutomatic]` 或 `[SkipScan]` 特性即可。一旦贴了此特性，那么就需要手动配置 `DbContext` 的 `OnModelCreating`
+如果需要跳过自动注册，只需要贴 `[Manual]` 或 `[SuppressSniffer]` 特性即可。一旦贴了此特性，那么就需要手动配置 `DbContext` 的 `OnModelCreating`
 
 ## 9.3.6 配置列名及列类型
 

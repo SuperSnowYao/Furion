@@ -1,14 +1,10 @@
-// -----------------------------------------------------------------------------
-// 让 .NET 开发更简单，更通用，更流行。
-// Copyright © 2020-2021 Furion, 百小僧, Baiqian Co.,Ltd.
-//
-// 框架名称：Furion
-// 框架作者：百小僧
-// 框架版本：2.7.9
-// 源码地址：Gitee： https://gitee.com/dotnetchina/Furion
-//          Github：https://github.com/monksoul/Furion
-// 开源协议：Apache-2.0（https://gitee.com/dotnetchina/Furion/blob/master/LICENSE）
-// -----------------------------------------------------------------------------
+// Copyright (c) 2020-2022 百小僧, Baiqian Co.,Ltd.
+// Furion is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan PSL v2. 
+// You may obtain a copy of Mulan PSL v2 at:
+//             https://gitee.com/dotnetchina/Furion/blob/master/LICENSE 
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.  
+// See the Mulan PSL v2 for more details.
 
 using Furion.Authorization;
 using Microsoft.AspNetCore.Authentication;
@@ -16,12 +12,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Primitives;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
+using System.Runtime.Loader;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -40,7 +38,7 @@ namespace Furion.DataEncryption
         /// <param name="payload"></param>
         /// <param name="expiredTime">过期时间（分钟）</param>
         /// <returns></returns>
-        public static string Encrypt(Dictionary<string, object> payload, long? expiredTime = null)
+        public static string Encrypt(IDictionary<string, object> payload, long? expiredTime = null)
         {
             var (Payload, JWTSettings) = CombinePayload(payload, expiredTime);
             return Encrypt(JWTSettings.IssuerSigningKey, Payload, JWTSettings.Algorithm);
@@ -53,7 +51,7 @@ namespace Furion.DataEncryption
         /// <param name="payload"></param>
         /// <param name="algorithm"></param>
         /// <returns></returns>
-        public static string Encrypt(string issuerSigningKey, Dictionary<string, object> payload, string algorithm = SecurityAlgorithms.HmacSha256)
+        public static string Encrypt(string issuerSigningKey, IDictionary<string, object> payload, string algorithm = SecurityAlgorithms.HmacSha256)
         {
             return Encrypt(issuerSigningKey, JsonSerializer.Serialize(payload), algorithm);
         }
@@ -78,9 +76,9 @@ namespace Furion.DataEncryption
         /// 生成刷新 Token
         /// </summary>
         /// <param name="accessToken"></param>
-        /// <param name="days">刷新 Token 有效期（天）</param>
+        /// <param name="expiredTime">刷新 Token 有效期（分钟）</param>
         /// <returns></returns>
-        public static string GenerateRefreshToken(string accessToken, int days = 30)
+        public static string GenerateRefreshToken(string accessToken, int expiredTime = 43200)
         {
             // 分割Token
             var tokenParagraphs = accessToken.Split('.', StringSplitOptions.RemoveEmptyEntries);
@@ -97,7 +95,7 @@ namespace Furion.DataEncryption
                 { "k",tokenParagraphs[1].Substring(s,l) }
             };
 
-            return Encrypt(payload, days * 24 * 60);
+            return Encrypt(payload, expiredTime);
         }
 
         /// <summary>
@@ -115,20 +113,23 @@ namespace Furion.DataEncryption
             if (_isValid) return default;
 
             // 判断刷新Token 是否过期
-            var (isValid, token, _) = Validate(refreshToken);
+            var (isValid, refreshTokenObj, _) = Validate(refreshToken);
             if (!isValid) return default;
+
+            // 解析 HttpContext
+            var httpContext = GetCurrentHttpContext();
 
             // 判断这个刷新Token 是否已刷新过
             var blacklistRefreshKey = "BLACKLIST_REFRESH_TOKEN:" + refreshToken;
-            var distributedCache = InternalHttpContext.Current()?.RequestServices?.GetService<IDistributedCache>();
+            var distributedCache = httpContext?.RequestServices?.GetService<IDistributedCache>();
 
             // 处理token并发容错问题
-            var nowTime = DateTimeOffset.Now;
+            var nowTime = DateTimeOffset.UtcNow;
             var cachedValue = distributedCache?.GetString(blacklistRefreshKey);
             var isRefresh = !string.IsNullOrWhiteSpace(cachedValue);    // 判断是否刷新过
             if (isRefresh)
             {
-                var refreshTime = DateTimeOffset.Parse(cachedValue);
+                var refreshTime = new DateTimeOffset(long.Parse(cachedValue), TimeSpan.Zero);
                 // 处理并发时容差值
                 if ((nowTime - refreshTime).TotalSeconds > clockSkew) return default;
             }
@@ -138,19 +139,23 @@ namespace Furion.DataEncryption
             if (tokenParagraphs.Length < 3) return default;
 
             // 判断各个部分是否匹配
-            if (!token.GetPayloadValue<string>("f").Equals(tokenParagraphs[0])) return default;
-            if (!token.GetPayloadValue<string>("e").Equals(tokenParagraphs[2])) return default;
-            if (!tokenParagraphs[1].Substring(token.GetPayloadValue<int>("s"), token.GetPayloadValue<int>("l")).Equals(token.GetPayloadValue<string>("k"))) return default;
+            if (!refreshTokenObj.GetPayloadValue<string>("f").Equals(tokenParagraphs[0])) return default;
+            if (!refreshTokenObj.GetPayloadValue<string>("e").Equals(tokenParagraphs[2])) return default;
+            if (!tokenParagraphs[1].Substring(refreshTokenObj.GetPayloadValue<int>("s"), refreshTokenObj.GetPayloadValue<int>("l")).Equals(refreshTokenObj.GetPayloadValue<string>("k"))) return default;
 
+            // 获取过期 Token 的存储信息
             var oldToken = ReadJwtToken(expiredToken);
             var payload = oldToken.Claims.Where(u => !StationaryClaimTypes.Contains(u.Type))
-                                         .ToDictionary(u => u.Type, u => (object)u.Value);
+                                         .ToDictionary(u => u.Type, u => (object)u.Value, new MultiClaimsDictionaryComparer());
 
             // 交换成功后登记刷新Token，标记失效
-            if (!isRefresh) distributedCache?.SetString(blacklistRefreshKey, nowTime.ToString(), new DistributedCacheEntryOptions
+            if (!isRefresh)
             {
-                AbsoluteExpiration = DateTimeOffset.FromUnixTimeSeconds(token.GetPayloadValue<long>(JwtRegisteredClaimNames.Exp))
-            });
+                distributedCache?.SetString(blacklistRefreshKey, nowTime.Ticks.ToString(), new DistributedCacheEntryOptions
+                {
+                    AbsoluteExpiration = DateTimeOffset.FromUnixTimeSeconds(refreshTokenObj.GetPayloadValue<long>(JwtRegisteredClaimNames.Exp))
+                });
+            }
 
             return Encrypt(payload, expiredTime);
         }
@@ -161,11 +166,11 @@ namespace Furion.DataEncryption
         /// <param name="context"></param>
         /// <param name="httpContext"></param>
         /// <param name="expiredTime">新 Token 过期时间（分钟）</param>
-        /// <param name="days">新刷新 Token 有效期（天）</param>
+        /// <param name="refreshTokenExpiredTime">新刷新 Token 有效期（分钟）</param>
         /// <param name="tokenPrefix"></param>
         /// <param name="clockSkew"></param>
         /// <returns></returns>
-        public static bool AutoRefreshToken(AuthorizationHandlerContext context, DefaultHttpContext httpContext, long? expiredTime = null, int days = 30, string tokenPrefix = "Bearer ", long clockSkew = 5)
+        public static bool AutoRefreshToken(AuthorizationHandlerContext context, DefaultHttpContext httpContext, long? expiredTime = null, int refreshTokenExpiredTime = 43200, string tokenPrefix = "Bearer ", long clockSkew = 5)
         {
             // 如果验证有效，则跳过刷新
             if (context.User.Identity.IsAuthenticated) return true;
@@ -195,10 +200,18 @@ namespace Furion.DataEncryption
             httpContext.User = claimsPrincipal;
             httpContext.SignInAsync(claimsPrincipal);
 
+            string accessTokenKey = "access-token"
+                 , xAccessTokenKey = "x-access-token"
+                 , accessControlExposeKey = "Access-Control-Expose-Headers";
+
             // 返回新的 Token
-            httpContext.Response.Headers["access-token"] = accessToken;
+            httpContext.Response.Headers[accessTokenKey] = accessToken;
             // 返回新的 刷新Token
-            httpContext.Response.Headers["x-access-token"] = GenerateRefreshToken(accessToken, days);
+            httpContext.Response.Headers[xAccessTokenKey] = GenerateRefreshToken(accessToken, refreshTokenExpiredTime);
+
+            // 处理 axios 问题
+            httpContext.Response.Headers.TryGetValue(accessControlExposeKey, out var acehs);
+            httpContext.Response.Headers[accessControlExposeKey] = string.Join(',', StringValues.Concat(acehs, new StringValues(new[] { accessTokenKey, xAccessTokenKey })).Distinct());
 
             return true;
         }
@@ -301,7 +314,7 @@ namespace Furion.DataEncryption
         /// <returns></returns>
         public static JWTSettingsOptions GetJWTSettings()
         {
-            return InternalHttpContext.Current()?.RequestServices?.GetService<IOptions<JWTSettingsOptions>>()?.Value ?? SetDefaultJwtSettings(new JWTSettingsOptions());
+            return FrameworkApp.GetMethod("GetOptions").MakeGenericMethod(typeof(JWTSettingsOptions)).Invoke(null, new object[] { null }) as JWTSettingsOptions ?? SetDefaultJwtSettings(new JWTSettingsOptions());
         }
 
         /// <summary>
@@ -338,10 +351,10 @@ namespace Furion.DataEncryption
         /// <param name="payload"></param>
         /// <param name="expiredTime">过期时间，单位：分钟</param>
         /// <returns></returns>
-        private static (Dictionary<string, object> Payload, JWTSettingsOptions JWTSettings) CombinePayload(Dictionary<string, object> payload, long? expiredTime = null)
+        private static (IDictionary<string, object> Payload, JWTSettingsOptions JWTSettings) CombinePayload(IDictionary<string, object> payload, long? expiredTime = null)
         {
             var jwtSettings = GetJWTSettings();
-            var datetimeOffset = DateTimeOffset.Now;
+            var datetimeOffset = DateTimeOffset.UtcNow;
 
             if (!payload.ContainsKey(JwtRegisteredClaimNames.Iat))
             {
@@ -356,7 +369,7 @@ namespace Furion.DataEncryption
             if (!payload.ContainsKey(JwtRegisteredClaimNames.Exp))
             {
                 var minute = expiredTime ?? jwtSettings?.ExpiredTime ?? 20;
-                payload.Add(JwtRegisteredClaimNames.Exp, DateTimeOffset.Now.AddSeconds(minute * 60).ToUnixTimeSeconds());
+                payload.Add(JwtRegisteredClaimNames.Exp, DateTimeOffset.UtcNow.AddMinutes(minute).ToUnixTimeSeconds());
             }
 
             if (!payload.ContainsKey(JwtRegisteredClaimNames.Iss))
@@ -406,8 +419,44 @@ namespace Furion.DataEncryption
         }
 
         /// <summary>
+        /// 获取当前的 HttpContext
+        /// </summary>
+        /// <returns></returns>
+        private static HttpContext GetCurrentHttpContext()
+        {
+            return FrameworkApp.GetProperty("HttpContext").GetValue(null) as HttpContext;
+        }
+
+        /// <summary>
         /// 固定的 Claim 类型
         /// </summary>
         private static readonly string[] StationaryClaimTypes = new[] { JwtRegisteredClaimNames.Iat, JwtRegisteredClaimNames.Nbf, JwtRegisteredClaimNames.Exp, JwtRegisteredClaimNames.Iss, JwtRegisteredClaimNames.Aud };
+
+        /// <summary>
+        /// 框架 App 静态类
+        /// </summary>
+        internal static Type FrameworkApp { get; set; }
+
+        /// <summary>
+        /// 获取框架上下文
+        /// </summary>
+        /// <returns></returns>
+        internal static Assembly GetFrameworkContext(Assembly callAssembly)
+        {
+            if (FrameworkApp != null) return FrameworkApp.Assembly;
+
+            // 获取 Furion 程序集名称
+            var furionAssemblyName = callAssembly.GetReferencedAssemblies()
+                                                       .FirstOrDefault(u => u.Name == "Furion" || u.Name == "Furion.Pure")
+                                                       ?? throw new InvalidOperationException("No `Furion` assembly installed in the current project was detected.");
+
+            // 加载 Furion 程序集
+            var furionAssembly = AssemblyLoadContext.Default.LoadFromAssemblyName(furionAssemblyName);
+
+            // 获取 Furion.App 静态类
+            FrameworkApp = furionAssembly.GetType("Furion.App");
+
+            return furionAssembly;
+        }
     }
 }

@@ -1,8 +1,8 @@
 ---
 slug: httpcontext
-title: 2. HttpContext 应用
+title: 1. HttpContext 应用
 author: dotNET China
-author_title: 为中国 .NET 开发者提供优质的资讯和技术分享。
+author_title: 让 .NET 开发更简单，更通用，更流行。
 author_url: https://www.chinadot.net
 author_image_url: https://i.loli.net/2021/01/19/M8q5a3OTZWUKicl.png
 tags: [furion, furos, .net, .netcore, .net5, httpcontext]
@@ -36,14 +36,6 @@ public class AppService
         var httpContext = httpContextAccessor.HttpContext;
     }
 }
-```
-
-### 通过 `HttpContextLocal` 静态类
-
-`Furion` 框架提供了 `HttpContextLocal` 静态类方式获取 `HttpContext`，如：
-
-```cs
-var HttpContext = HttpContextLocal.Current();
 ```
 
 ### 通过 `App.HttpContext`
@@ -84,10 +76,4 @@ var ipv6 = httpContext.GetLocalIpAddressToIPv6();
 ```cs
 var ipv4 = httpContext.GetRemoteIpAddressToIPv4();
 var ipv6 = httpContext.GetRemoteIpAddressToIPv6();
-```
-
-### 判断是否是 `Ajax` 请求
-
-```cs
-var isAjaxRequest = httpContext.IsAjaxRequest();
 ```

@@ -1,23 +1,23 @@
 ---
 id: deploy-docker-auto
-title: 34.1 Docker 环境持续部署
-sidebar_label: 34.1 Docker 环境持续部署
+title: 35.1 Docker 环境持续部署
+sidebar_label: 35.1 Docker 环境持续部署
 ---
 
 import useBaseUrl from "@docusaurus/useBaseUrl";
 
-## 34.1.1 关于全`Docker` 环境部署
+## 35.1.1 关于全 `Docker` 环境部署
 
-利用拥有 Dotnet 环境的 Jenkins，进行持续化部署
+利用拥有 `.NET` 环境的 `Jenkins`，进行持续化部署
 
-## 34.1.2 安装 Docker 版 Jenkins
+## 35.1.2 安装 `Docker` 版 `Jenkins`
 
-正常在 Docker 中拉取的 Jenkins:lts 是无法执行 Dotnet 命令的（就算你宿主机有 dotnet 环境、docker 中也有 Dotnet 环境也不可以），
-所以我们只能构建一个包含 Dotnet 的镜像
+正常在 `Docker` 中拉取的 `Jenkins:lts` 是无法执行 `dotnet` 命令的（就算你宿主机有 `dotnet` 环境、`docker` 中也有 `dotnet` 环境也不可以），
+所以我们只能构建一个包含 `dotnet` 的镜像
 
-### 34.1.2.1 使用 Dockerfile 制作镜像
+### 35.1.2.1 使用 Dockerfile 制作镜像
 
-使用 Dockerfile 创建包含 dotnet 的 Jenkins 镜像
+使用 `Dockerfile` 创建包含 `dotnet` 的 `Jenkins` 镜像
 
 - 👉 编写 `Dockerfile`
 
@@ -40,23 +40,23 @@ USER jenkins
 - 👉 命令解释
 
 ```bash
-- 1.这个Docker镜像基于jenkins
-- 2.设置当前用户为root，因为后面安装需要使用root
-- 3.设置当前工作目录为dotnet
-- 4.下载dotnet SDK包，保存为dotnet.tar.gz。这里要注意下载正确版本的SDK，可前往微软官方网站获取下载链接：https://dotnet.microsoft.com/download
-- 5.解压dotnet SDK到当前目录，即/dotnet目录
-- 6.删除dotnet SDK包
-- 7.把dotnet目录和dotnet tools目录添加到环境变量PATH，这样就可以使用dotnet命令了
-- 8.设置DOTNET_ROOT变量
-- 9.更新源
-- 10.安装一些必需的，常用的工具包，其中icu-devtools是运行dotnet需要的
-- 11.修改jenkins用户到root附加组
-- 12.设置当前用户为jenkins
+- 1. 这个Docker镜像基于jenkins
+- 2. 设置当前用户为root，因为后面安装需要使用root
+- 3. 设置当前工作目录为dotnet
+- 4. 下载dotnet SDK包，保存为dotnet.tar.gz。这里要注意下载正确版本的SDK，可前往微软官方网站获取下载链接：https://dotnet.microsoft.com/download
+- 5. 解压dotnet SDK到当前目录，即/dotnet目录
+- 6. 删除dotnet SDK包
+- 7. 把dotnet目录和dotnet tools目录添加到环境变量PATH，这样就可以使用dotnet命令了
+- 8. 设置DOTNET_ROOT变量
+- 9. 更新源
+- 10. 安装一些必需的，常用的工具包，其中icu-devtools是运行dotnet需要的
+- 11. 修改jenkins用户到root附加组
+- 12. 设置当前用户为jenkins
 ```
 
-- 👉 构建 `Docker` 镜像 name=jenkins:dotnet
+- 👉 构建 `Docker` 镜像 `name=jenkins:dotnet`
 
-cd 到根目录下（必须含 `Dockerfile`） 只需构建命令：
+`cd` 到根目录下（必须含 `Dockerfile`） 只需构建命令：
 
 ```bash
  docker build -t jenkins:dotnet .
@@ -64,11 +64,11 @@ cd 到根目录下（必须含 `Dockerfile`） 只需构建命令：
 
 :::important 特别注意
 
-后端的 `.` 不能省略
+结尾 `.` 不能省略
 
 :::
 
-### 34.1.2.2 运行 Jenkins:dotnet 镜像
+### 35.1.2.2 运行 `Jenkins:dotnet` 镜像
 
 ```bash
 docker run -d -p 8080:8080 -p 50000:50000 --name mjenkins  \
@@ -83,11 +83,11 @@ docker run -d -p 8080:8080 -p 50000:50000 --name mjenkins  \
            jenkins:dotnet
 ```
 
-接下来就是比较俗套的安装 Jenkins 步骤，网上资料很多，不展开了。
+接下来就是比较俗套的安装 `Jenkins` 步骤，网上资料很多，不展开了。
 
-## 34.1.3 Jenkins 的自动化部署
+## 35.1.3 `Jenkins` 的自动化部署
 
-### 34.1.3.1 编写 Shell 脚本
+### 35.1.3.1 编写 Shell 脚本
 
 ```bash
 # Jenkins 构建 测试服
@@ -156,21 +156,21 @@ echo "success!"
 
 ```
 
-> 就这样自动化部署就好了。 测试服的 Jenkins 将源码拉下来，Publish，Docker Build，Docker Run。
+> 就这样自动化部署就好了。 测试服的 `Jenkins` 将源码拉下来，`Publish，Docker Build，Docker Run`。
 
-> 这里想要发布的时候，每次都需要手动去点击“构建”才会执行。也可以做成当分支合并成功后自动运行。反正 Jenkins 装好之后，你想要什么都能玩起来。比如指定分支提交后自动“构建”、比如构建成功后合并到 Master 等等
+> 这里想要发布的时候，每次都需要手动去点击“构建”才会执行。也可以做成当分支合并成功后自动运行。反正 `Jenkins` 装好之后，你想要什么都能玩起来。比如指定分支提交后自动“构建”、比如构建成功后合并到 Master 等等
 
-## 34.1.4 Jenkins 的自动化远程部署
+## 35.1.4 `Jenkins` 的自动化远程部署
 
-### 34.1.4.1 安装插件
+### 35.1.4.1 安装插件
 
-> Publish Over SSH
+> `Publish Over SSH`
 
-### 34.1.4.2 配置
+### 35.1.4.2 配置
 
-> 系统管理=>Publish over SSH
+> 系统管理 => `Publish over SSH`
 
-### 34.1.4.3 写脚本
+### 35.1.4.3 写脚本
 
 ```bash
 # Jenkins 构建  正式服
@@ -227,13 +227,13 @@ tar -czvf ${JENKINS_HOME}/workspace/${JOB_NAME}/publish/${JOB_NAME}.${BUILD_NUMB
 echo "success!"
 ```
 
-> 大概逻辑就是发布后，打个包。然后丢给远程，远程再执行 shell
+> 大概逻辑就是发布后，打个包。然后丢给远程，远程再执行 `shell`
 
-> 注意这里一定要发布到自己的 workspace 下，防止下一步死活找不到位置。如果找不到位置，只能慢慢用 ls 命令，一级一级去测，很麻烦
+> 注意这里一定要发布到自己的 `workspace` 下，防止下一步死活找不到位置。如果找不到位置，只能慢慢用 `ls` 命令，一级一级去测，很麻烦
 
-### 34.1.4.4 构建后操作（关键）
+### 35.1.4.4 构建后操作（关键）
 
-选择 Send Build artifacts over SSH
+选择 `Send Build artifacts over SSH`
 
 ```bash
 Source files: publish/
@@ -243,15 +243,13 @@ Exec command:bash /mudata/shell/publish.sh  ${JOB_NAME} jenkinsscmbase ${JOB_NAM
 ```
 
 - 选择自己的 SSH 服务器
-- Source files：一定是 workspace 下的地址
-- Remote directory：远程地址，从根目录开始
-- Exec command：要执行的 shell。这里所有的 Jenkins 环境变量都可以用
+- `Source files`：一定是 `workspace` 下的地址
+- `Remote directory`：远程地址，从根目录开始
+- `Exec command`：要执行的 shell。这里所有的 `Jenkins` 环境变量都可以用
 
-### 34.1.4.5 远程执行
+### 35.1.4.5 远程执行
 
-publish.sh
-
-```bash
+```bash title="publish.sh"
 # Jenkins Prod服 调用脚本
 solutionName=$1
 containerName=$2
@@ -286,9 +284,9 @@ cd  ${webDir}/ && docker build -t ${containerName} .
 docker run --name ${containerName} --restart=always -d -p ${port}:${port} --link myredis:myredis  -v /etc/localtime:/etc/localtime:ro ${containerName}
 ```
 
-> 这里的逻辑就是解压，然后 Docker 相关。每次构建都是带着版本号来的
+> 这里的逻辑就是解压，然后 `Docker` 相关。每次构建都是带着版本号来的。
 
-## 34.1.5 反馈与建议
+## 35.1.5 反馈与建议
 
 :::note 与我们交流
 

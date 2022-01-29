@@ -1,16 +1,11 @@
-﻿// -----------------------------------------------------------------------------
-// 让 .NET 开发更简单，更通用，更流行。
-// Copyright © 2020-2021 Furion, 百小僧, Baiqian Co.,Ltd.
-//
-// 框架名称：Furion
-// 框架作者：百小僧
-// 框架版本：2.7.9
-// 源码地址：Gitee： https://gitee.com/dotnetchina/Furion
-//          Github：https://github.com/monksoul/Furion
-// 开源协议：Apache-2.0（https://gitee.com/dotnetchina/Furion/blob/master/LICENSE）
-// -----------------------------------------------------------------------------
+﻿// Copyright (c) 2020-2022 百小僧, Baiqian Co.,Ltd.
+// Furion is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan PSL v2. 
+// You may obtain a copy of Mulan PSL v2 at:
+//             https://gitee.com/dotnetchina/Furion/blob/master/LICENSE 
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.  
+// See the Mulan PSL v2 for more details.
 
-using Furion.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Hosting;
@@ -22,26 +17,19 @@ namespace Furion.DatabaseAccessor
     /// <summary>
     /// 常量、公共方法配置类
     /// </summary>
-    [SkipScan]
     internal static class Penetrates
     {
         /// <summary>
-        /// 数据库上下文和定位器缓存
+        /// 数据库上下文描述器
         /// </summary>
-        internal static readonly ConcurrentDictionary<Type, Type> DbContextWithLocatorCached;
-
-        /// <summary>
-        /// 数据库上下文定位器缓存
-        /// </summary>
-        internal static readonly ConcurrentDictionary<string, Type> DbContextLocatorTypeCached;
+        internal static readonly ConcurrentDictionary<Type, Type> DbContextDescriptors;
 
         /// <summary>
         /// 构造函数
         /// </summary>
         static Penetrates()
         {
-            DbContextWithLocatorCached = new ConcurrentDictionary<Type, Type>();
-            DbContextLocatorTypeCached = new ConcurrentDictionary<string, Type>();
+            DbContextDescriptors = new ConcurrentDictionary<Type, Type>();
         }
 
         /// <summary>
@@ -55,7 +43,7 @@ namespace Furion.DatabaseAccessor
             return (serviceProvider, options) =>
             {
                 // 只有开发环境开启
-                if (App.HostEnvironment.IsDevelopment())
+                if (App.HostEnvironment?.IsDevelopment() ?? false)
                 {
                     options/*.UseLazyLoadingProxies()*/
                              .EnableDetailedErrors()
@@ -66,10 +54,18 @@ namespace Furion.DatabaseAccessor
 
                 // 添加拦截器
                 AddInterceptors(interceptors, options);
-
-                // .NET 5 版本已不再起作用
-                // options.UseInternalServiceProvider(serviceProvider);
             };
+        }
+
+        /// <summary>
+        /// 检查数据库上下文是否绑定
+        /// </summary>
+        /// <param name="dbContextLocatorType"></param>
+        /// <param name="dbContextType"></param>
+        /// <returns></returns>
+        internal static void CheckDbContextLocator(Type dbContextLocatorType, out Type dbContextType)
+        {
+            if (!DbContextDescriptors.TryGetValue(dbContextLocatorType, out dbContextType)) throw new InvalidCastException($" The dbcontext locator `{dbContextLocatorType.Name}` is not bind.");
         }
 
         /// <summary>

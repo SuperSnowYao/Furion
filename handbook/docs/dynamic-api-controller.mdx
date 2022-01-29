@@ -651,7 +651,7 @@ namespace Furion.Application
 
 :::important 小提示
 
-动态方法自定义路由如果以 **`/`** 开头，则不会合并控制器路由。
+动作方法自定义路由如果以 **`/`** 开头，则不会合并控制器路由。
 
 :::
 
@@ -852,7 +852,7 @@ public string Get(int id, string name)
 
 :::important 特别注意
 
-贴了 `[QueryParameters]` 之后，会对所有参数参数影响，包括类类型参数，如果不需要处理某个参数，只需要贴 `[FromXXX]` 特性即可。
+贴了 `[QueryParameters]` 之后，会对所有参数影响，包括类类型参数，如果不需要处理某个参数，只需要贴 `[FromXXX]` 特性即可。
 
 :::
 
@@ -876,7 +876,7 @@ public string Get(int id, string name)
   - 以 `Put/Update` 开头，则添加 `[HttpPut]` 特性。
   - 以 `Delete/Remove/Clear` 开头，则添加 `[HttpDelete]` 特性。
   - 以 `Patch` 开头，则添加 `[HttpPatch]` 特性
-  - 已 `Head` 开头，则添加 `[HttpHead]` 特性
+  - 以 `Head` 开头，则添加 `[HttpHead]` 特性
   - **支持自定义配置**
 - 如果不在上面约定中，则默认添加 `[HttpPost]` 特性。**支持自定义配置**
 
@@ -898,6 +898,64 @@ public string Get(int id, string name)
 二维数组中的每一个元素的第一个元素**必须是全小写**，第二个元素**必须是全大写大写**，第二个元素取值有：`HEAD, GET, PUT, POST, PATCH, DELETE`
 
 :::
+
+### 5.8.16 路由参数非必填/选填
+
+在 `Furion v2.8.6` 版本中实现了 `[FromRoute]` 参数非必填功能，支持以下几种方式：
+
+```cs {2,6,11,16}
+// 方式一，通过可空 ?
+public object Method1(int id, Datetime? dateTime)
+{
+}
+
+// 方式二，通过默认值
+public object Method1(int id, int age = 10)
+{
+}
+
+// 方式三，默认值 + 可空 ?
+public object Method1(int id, int? age = 10)
+{
+}
+
+// 方式四，[FromQuery] 修饰
+public object Method1(int id, [FromQuery]string keyword)
+{
+}
+```
+
+### 5.8.17 `[FormRoute]` 路由约束
+
+在 `Furion v2.8.6` 版本中，添加了 `[RouteConstraint]` 特性，可配置路由约束，如：`[RouteConstraint(":min(10)")]`
+
+```cs {2}
+// 最小值 10
+public object Method1([RouteConstraint(":min(10)")] int id)
+{
+}
+```
+
+`[RouteConstraint]` 支持路由约束符号如下：
+
+| 符号        | 描述                                   | 例子                            |
+| ----------- | -------------------------------------- | ------------------------------- |
+| `alpha`     | 匹配大写或小写拉丁字母字符（a-z、A-Z） | `:alpha`                        |
+| `bool`      | bool 类型                              | `:bool`                         |
+| `datetime`  | DateTime 类型                          | `:datetime`                     |
+| `decimal`   | decimal 类型                           | `:decimal`                      |
+| `double`    | double 类型                            | `:double`                       |
+| `float`     | float 类型                             | `:float`                        |
+| `guid`      | guid 类型                              | `:guid`                         |
+| `int`       | int 类型                               | `:int`                          |
+| `long`      | long 类型                              | `:long`                         |
+| `length`    | 匹配长度（字符串）                     | `:length(6)` 或 `:length(1,20)` |
+| `max`       | 最大值                                 | `:max(10)`                      |
+| `maxlength` | 最大长度（字符串）                     | `:maxlength(10)`                |
+| `min`       | 最小值                                 | `:min(10)`                      |
+| `minlength` | 最小长度（字符串）                     | `:minlength(10)`                |
+| `range`     | 取值范围                               | `:range(10,50)`                 |
+| `regex`     | 正则表达式                             | `:regex(^\d{3}-\d{3}-\d{4}$)`   |
 
 ## 5.9 `[ApiDescriptionSettings]`
 
@@ -1079,7 +1137,7 @@ namespace Furion.Application
 
 ### 5.9.8 `Version` 配置
 
-`Version` 参数可以配置接口版本，同时又可以复写特殊版本命名配置。默认版本号分隔符为 `@`。如：
+`Version` 参数可以配置接口版本，同时又可以复写特殊版本命名配置。默认版本分隔符为 `@`。如：
 
 ```cs {5,9-10}
 using Furion.DynamicApiController;
@@ -1394,7 +1452,28 @@ public class SampleAsyncActionFilter : IAsyncActionFilter
 
 详细用法可参见 [ASP.NET Core 5.0 - 筛选器](https://docs.microsoft.com/zh-cn/aspnet/core/mvc/controllers/filters?view=aspnetcore-5.0)
 
-## 5.12 反馈与建议
+## 5.12 设置 `api` 超时请求时间
+
+在 `Program.cs` 中添加 `.UseKestrel` 配置即可，如：
+
+```cs {8-12}
+public static IHostBuilder CreateHostBuilder(string[] args)
+{
+    return Host.CreateDefaultBuilder(args)
+        .ConfigureWebHostDefaults(webBuilder =>
+        {
+            webBuilder.Inject()
+                      .UseStartup<Startup>()
+                      .UseKestrel(option =>
+                      {
+                          option.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(20);
+                          option.Limits.RequestHeadersTimeout = TimeSpan.FromMinutes(20);
+                      });
+        });
+}
+```
+
+## 5.13 反馈与建议
 
 :::note 与我们交流
 

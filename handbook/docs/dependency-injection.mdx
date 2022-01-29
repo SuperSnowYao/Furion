@@ -6,6 +6,16 @@ sidebar_label: 12. 依赖注入/控制反转
 
 import useBaseUrl from "@docusaurus/useBaseUrl";
 
+:::note 阅前必读
+
+由于很多朋友第一次接触 `依赖注入/控制反转` 的架构理念，所以没搞明白 `作用域` 和 `多线程解析服务` 的问题，从而不正确的使用导致内存不断飙高，正确的方式应该是：
+
+- 尽可能的采用构造函数注入（如果这个类支持）
+- 在非静态中（**但在 Web 请求有效的声明周期内**）可安全使用 `App.GetService<>` 解析服务，如果是 `单例服务`，优先推荐构造函数注入或 `App.RootServices.GetService<>` 方式
+- 🤐 **在非 `Web` 环境、多线程环境、物联网等环境（含事件总线、定时任务等）🏒 除单例服务以外 🏒 必须采用 `Scoped.Create()` 方式创建作用域且服务在内部委托中解析！** 🤐
+
+:::
+
 ## 12.1 依赖注入
 
 所谓依赖注入，是指程序运行过程中，如果需要调用另一个对象协助时，无须在代码中创建被调用者，而是依赖于外部的注入。
@@ -479,9 +489,9 @@ namespace Furion.Web.Entry.Controllers
 - `Pattern`：配置注册选项，`InjectionPatterns` 类型，可选值：
   - `Self`：只注册自己
   - `FirstInterface`：只注册第一个接口
-  - `SelfWithFirstInterface`：注册自己和第一个接口，**默认值**
+  - `SelfWithFirstInterface`：注册自己和第一个接口
   - `ImplementedInterfaces`：注册所有接口
-  - `All`：注册自己包括所有接口
+  - `All`：注册自己包括所有接口 ，**默认值**
 - `Named`：配置实例别名，通过别名可以解析接口，如同一个接口有多个实现，那么可以通过别名解析不同的实现，默认只为实现类的类名
 - `Order`：注册排序，数字越大，则越在最后注册，默认 `0`
 - `Proxy`：配置代理拦截类型，也就是 `AOP`，**代理类型必须继承 `AspectDispatchProxy` 类和 `IDispatchProxy` 接口**，无默认值
@@ -573,7 +583,7 @@ services.AddScoped(typeof(ISpecService), provider = > {
 
 :::warning 关于动态 API 和服务的区别
 
-如果您的服务是动态 API，那么请使用 [动态 API - AOP 拦截](dynamic-api-controller#511-关于-aop-拦截)，原因是动态 API 本质是控制器，所以采用 `Filter` 方式。
+如果您的服务是动态 API，那么请使用 [动态 API - AOP 拦截](/docs/dynamic-api-controller#511-关于-aop-拦截)，原因是动态 API 本质是控制器，所以采用 `Filter` 方式。
 
 :::
 
@@ -705,11 +715,11 @@ namespace Furion.Application
 }
 ```
 
-这样就会拦截所有的 `Service`，当然也可以通过给特定类贴 `[SkipProxy]` 跳过全局拦截操作。
+这样就会拦截所有的 `Service`，当然也可以通过给特定类贴 `[SuppressProxy]` 跳过全局拦截操作。
 
 :::important 拦截优先级
 
-`[SkipProxy]` > `[Injection(Proxy = typeof(LogDispatchProxy))]` > `全局拦截`。
+`[SuppressProxy]` > `[Injection(Proxy = typeof(LogDispatchProxy))]` > `全局拦截`。
 
 :::
 

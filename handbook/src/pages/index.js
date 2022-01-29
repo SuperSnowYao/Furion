@@ -1,19 +1,19 @@
-import React, { useEffect, useState } from "react";
-import Layout from "@theme/Layout";
 import Link from "@docusaurus/Link";
+import useBaseUrl from "@docusaurus/useBaseUrl";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 import useThemeContext from "@theme/hooks/useThemeContext";
-import useBaseUrl from "@docusaurus/useBaseUrl";
-import WindowIcon from "./windows.svg";
-import LinuxIcon from "./linux.svg";
-import MacOSIcon from "./macos.svg";
-import DockerIcon from "./docker.svg";
-import KubernetesIcon from "./kubernetes.svg";
+import Layout from "@theme/Layout";
 import components from "@theme/MDXComponents";
-import "./index.css";
-import "./index.own.css";
+import React from "react";
 import contributors from "../data/contributors";
 import urls from "../data/urls";
+import DockerIcon from "./docker.svg";
+import "./index.css";
+import "./index.own.css";
+import KubernetesIcon from "./kubernetes.svg";
+import LinuxIcon from "./linux.svg";
+import MacOSIcon from "./macos.svg";
+import WindowIcon from "./windows.svg";
 
 function Home() {
   const context = useDocusaurusContext();
@@ -44,7 +44,7 @@ function Banner() {
             <span
               style={{ fontSize: 14, fontWeight: "normal", color: "#8759ff" }}
             >
-              [fi:rɪən]
+              [fu:rɪən]
             </span>
           </div>
           <div className="furion-banner-description">
@@ -81,7 +81,7 @@ function Banner() {
             >
               一分钟上手
             </Link>
-            <div className="furion-version">v2.7.8</div>
+            <div className="furion-version">v2.20.3</div>
           </div>
         </div>
         <div className="furion-banner-item">
@@ -129,7 +129,7 @@ function Gitee() {
         完全开源免费
       </p>
       <h1 className={"furion-big-title" + (isDarkTheme ? " dark" : "")}>
-        代码托管在开源中国 Gitee
+        ⭐️ 木兰宽松开源协议，代码在 Gitee 平台托管 ⭐️
       </h1>
       <div className="furion-gitee-log">
         <div
@@ -140,7 +140,7 @@ function Gitee() {
             className={"furion-log-jiao" + (isDarkTheme ? " dark" : "")}
           ></div>
           <div className="furion-log-number">
-            <div style={{ color: "#723cff" }}>5510 +</div>
+            <div style={{ color: "#723cff" }}>7300 +</div>
             <span className={isDarkTheme ? " dark" : ""}>Stars</span>
           </div>
         </div>
@@ -152,7 +152,7 @@ function Gitee() {
             className={"furion-log-jiao" + (isDarkTheme ? " dark" : "")}
           ></div>
           <div className="furion-log-number">
-            <div style={{ color: "#3fbbfe" }}>2140 +</div>
+            <div style={{ color: "#3fbbfe" }}>3100 +</div>
             <span className={isDarkTheme ? " dark" : ""}>Forks</span>
           </div>
         </div>
@@ -164,7 +164,7 @@ function Gitee() {
             className={"furion-log-jiao" + (isDarkTheme ? " dark" : "")}
           ></div>
           <div className="furion-log-number">
-            <div style={{ color: "#1fd898" }}>377,945</div>
+            <div style={{ color: "#1fd898" }}>1,246,527</div>
             <span className={isDarkTheme ? " dark" : ""}>Downloads</span>
           </div>
         </div>
@@ -297,6 +297,16 @@ function WhoUse() {
         <div className="furion-custom-img">
           <img src={useBaseUrl("img/jjd.png")} height="100" />
         </div>
+        <div className="furion-custom-img">
+          <a href="http://www.samfeng.cn/" target="_blank">
+            <img src={useBaseUrl("img/custom10.png")} height="100" />
+          </a>
+        </div>
+        <div className="furion-custom-img">
+          <a href="http://www.ketaisoft.com/" target="_blank">
+            <img src={useBaseUrl("img/custom11.png")} height="100" />
+          </a>
+        </div>
       </div>
       <div className="furion-who-des">
         <div style={{ maxWidth: 350 }}>
@@ -326,8 +336,8 @@ function Links() {
         它们一样是优秀的项目/网站
       </h1>
       <div className="furion-links-content">
-        {urls.map((item) => (
-          <a href={item.url} target="_blank" title={item.title}>
+        {urls.map((item, i) => (
+          <a href={item.url} key={i} target="_blank" title={item.title}>
             {item.text}
           </a>
         ))}

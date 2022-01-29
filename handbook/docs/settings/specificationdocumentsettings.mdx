@@ -14,7 +14,7 @@ sidebar_label: 7. 规范化文档配置
   - `DocumentTitle`：文档标题，`string`，默认 `Specification Api Document`
   - `DefaultGroupName`：默认分组名，`string`，默认 `Default`
   - `EnableAuthorized`：是否启用权限控制，`bool`，默认 `true`
-  - `FormatAsV2`：采用 `Swagger 2.0` 版本，`bool`，默认 `false`
+  - `FormatAsV2`：采用 `Swagger 2.0` 版本，`bool`，默认 `false` **[已弃用](https://github.com/domaindrivendev/Swashbuckle.WebApi/issues/1393)**
   - `RoutePrefix`：规范化文档地址，`string`，默认 `api`，**如果希望在首页，改为空字符串即可**。
   - `DocExpansionState`：文档显示方式，`DocExpansion`，默认 `List`，取值：
     - `List`：列表式（展开子类），**默认值**
@@ -27,6 +27,8 @@ sidebar_label: 7. 规范化文档配置
   - `HideServers`：是否隐藏 Server 下拉列表，`bool` 类型，默认 `true`
   - `RouteTemplate`：配置文档 `swagger.json` 路由模板，默认模板：`swagger/{documentName}/swagger.json`, `{documentName}` 代表分组名，**必须保留原样**
   - `PackagesGroups`：配置模块化内置分组名称，`string[]` 类型，默认 `[]`
+  - `EnableEnumSchemaFilter`：启用枚举 Schema 筛选器，`bool` 类型，默认 `true`
+  - `EnableTagsOrderDocumentFilter`：启用标签排序筛选器，`bool` 类型，默认 `true`
 
 另外 `SpecificationOpenApiInfo` 内置配置如下：
 
@@ -58,7 +60,7 @@ sidebar_label: 7. 规范化文档配置
           "Email": "monksoul@outlook.com"
         },
         "License": {
-          "Name": "Apache-2.0",
+          "Name": "MulanPSL-2.0",
           "Url": "https://gitee.com/dotnetchina/Furion/blob/alpha/LICENSE"
         }
       }

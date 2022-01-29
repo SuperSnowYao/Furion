@@ -1,19 +1,16 @@
-﻿// -----------------------------------------------------------------------------
-// 让 .NET 开发更简单，更通用，更流行。
-// Copyright © 2020-2021 Furion, 百小僧, Baiqian Co.,Ltd.
-//
-// 框架名称：Furion
-// 框架作者：百小僧
-// 框架版本：2.7.9
-// 源码地址：Gitee： https://gitee.com/dotnetchina/Furion
-//          Github：https://github.com/monksoul/Furion
-// 开源协议：Apache-2.0（https://gitee.com/dotnetchina/Furion/blob/master/LICENSE）
-// -----------------------------------------------------------------------------
+﻿// Copyright (c) 2020-2022 百小僧, Baiqian Co.,Ltd.
+// Furion is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan PSL v2. 
+// You may obtain a copy of Mulan PSL v2 at:
+//             https://gitee.com/dotnetchina/Furion/blob/master/LICENSE 
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.  
+// See the Mulan PSL v2 for more details.
 
 using Furion.DependencyInjection;
 using Furion.Extensions;
 using Furion.Reflection;
 using Furion.Templates.Extensions;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -26,7 +23,7 @@ namespace Furion.DatabaseAccessor
     /// <summary>
     /// Sql 执行代理类
     /// </summary>
-    [SkipScan]
+    [SuppressSniffer]
     public class SqlDispatchProxy : AspectDispatchProxy, IDispatchProxy
     {
         /// <summary>
@@ -40,6 +37,11 @@ namespace Furion.DatabaseAccessor
         public IServiceProvider Services { get; set; }
 
         /// <summary>
+        /// 数据库上下文定位器类型
+        /// </summary>
+        private Type DbContextLocator { get; set; }
+
+        /// <summary>
         /// 拦截同步方法
         /// </summary>
         /// <param name="method"></param>
@@ -47,6 +49,20 @@ namespace Furion.DatabaseAccessor
         /// <returns></returns>
         public override object Invoke(MethodInfo method, object[] args)
         {
+            // 切换数据库上下文
+            if (method.IsGenericMethod && method.Name == nameof(ISqlDispatchProxy.Change) && method.ReturnType == typeof(void))
+            {
+                DbContextLocator = method.GetGenericArguments().First();
+                return default;
+            }
+
+            // 重置数据库上下文定位器
+            if (method.Name == nameof(ISqlDispatchProxy.ResetIt) && method.ReturnType == typeof(void))
+            {
+                DbContextLocator = default;
+                return default;
+            }
+
             // 获取 Sql 代理方法信息
             var sqlProxyMethod = GetProxyMethod(method, args);
             return ExecuteSql(sqlProxyMethod);
@@ -242,8 +258,11 @@ namespace Furion.DatabaseAccessor
             // 获取方法真实返回值类型
             var returnType = method.GetRealReturnType();
 
+            // 获取方法所在类型
+            var declaringType = method.DeclaringType;
+
             // 获取数据库上下文
-            var dbContext = Db.GetDbContext(sqlProxyAttribute.DbContextLocator ?? typeof(MasterDbContextLocator), Services);
+            var dbContext = GetDbContext(method);
 
             // 转换方法参数
             var parameters = CombineDbParameter(method, args);
@@ -281,19 +300,28 @@ namespace Furion.DatabaseAccessor
                 Name = u.Name,
                 Value = args[i]
             });
+
             // 渲染模板
             finalSql = finalSql.Render(methodParameterInfos.ToDictionary(u => u.Name, u => u.Value));
 
             // 返回
-            return new SqlProxyMethod
+            var sqlProxyMethod = new SqlProxyMethod
             {
                 ParameterModel = parameters,
                 Context = dbContext,
                 ReturnType = returnType,
                 IsAsync = method.IsAsync(),
                 CommandType = commandType,
-                FinalSql = finalSql
+                FinalSql = finalSql,
+                Method = method,
+                Arguments = args,
+                InterceptorId = string.IsNullOrWhiteSpace(sqlProxyAttribute.InterceptorId) ? method.Name : sqlProxyAttribute.InterceptorId
             };
+
+            // 添加方法拦截
+            CallMethodInterceptors(declaringType, sqlProxyMethod);
+
+            return sqlProxyMethod;
         }
 
         /// <summary>
@@ -322,7 +350,54 @@ namespace Furion.DatabaseAccessor
                 }
                 return dic;
             }
+            // 直接使用第一个模型转 DbParameters 参数
             else return arguments.First();
+        }
+
+        /// <summary>
+        /// 获取数据库上下文
+        /// </summary>
+        /// <param name="method"></param>
+        /// <returns></returns>
+        private DbContext GetDbContext(MethodInfo method)
+        {
+            // 解析数据库上下文定位器
+            var dbContextLocator = DbContextLocator
+                ?? method.GetFoundAttribute<SqlDbContextLocatorAttribute>(true)?.Locator
+                ?? typeof(MasterDbContextLocator);
+
+            var dbContext = Db.GetDbContext(dbContextLocator, Services);
+
+            // 设置 ADO.NET 超时时间
+            var timeout = method.GetFoundAttribute<TimeoutAttribute>(true)?.Seconds;
+            if (timeout != null && timeout.Value > 0) dbContext.Database.SetCommandTimeout(timeout.Value);
+
+            return dbContext;
+        }
+
+        /// <summary>
+        /// 添加方法拦截
+        /// </summary>
+        /// <param name="declaringType"></param>
+        /// <param name="sqlProxyMethod"></param>
+        private static void CallMethodInterceptors(Type declaringType, SqlProxyMethod sqlProxyMethod)
+        {
+            // 获取所有静态方法且贴有 [Interceptor] 特性
+            var interceptorMethods = declaringType.GetMethods()
+                                                                    .Where(u => u.IsDefined(typeof(InterceptorAttribute), true));
+
+            foreach (var method in interceptorMethods)
+            {
+                var interceptorAttribute = method.GetCustomAttribute<InterceptorAttribute>(true);
+
+                var interceptorIds = interceptorAttribute.InterceptorIds;
+
+                // 如果拦截Id数组不为空且包含当前拦截Id，则跳过
+                if (interceptorIds != null && interceptorIds.Length > 0 && !interceptorIds.Contains(sqlProxyMethod.InterceptorId, StringComparer.OrdinalIgnoreCase)) continue;
+
+                var onInterceptor = (Action<SqlProxyMethod>)Delegate.CreateDelegate(typeof(Action<SqlProxyMethod>), method);
+                onInterceptor(sqlProxyMethod);
+            }
         }
     }
 }

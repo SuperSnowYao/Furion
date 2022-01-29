@@ -1,14 +1,10 @@
-﻿// -----------------------------------------------------------------------------
-// 让 .NET 开发更简单，更通用，更流行。
-// Copyright © 2020-2021 Furion, 百小僧, Baiqian Co.,Ltd.
-//
-// 框架名称：Furion
-// 框架作者：百小僧
-// 框架版本：2.7.9
-// 源码地址：Gitee： https://gitee.com/dotnetchina/Furion
-//          Github：https://github.com/monksoul/Furion
-// 开源协议：Apache-2.0（https://gitee.com/dotnetchina/Furion/blob/master/LICENSE）
-// -----------------------------------------------------------------------------
+﻿// Copyright (c) 2020-2022 百小僧, Baiqian Co.,Ltd.
+// Furion is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan PSL v2. 
+// You may obtain a copy of Mulan PSL v2 at:
+//             https://gitee.com/dotnetchina/Furion/blob/master/LICENSE 
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.  
+// See the Mulan PSL v2 for more details.
 
 using Furion.Authorization;
 using Furion.DataEncryption;
@@ -17,8 +13,6 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Authorization;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System;
 using System.Linq;
@@ -41,18 +35,19 @@ namespace Microsoft.Extensions.DependencyInjection
         /// <returns></returns>
         public static AuthenticationBuilder AddJwt(this AuthenticationBuilder authenticationBuilder, object tokenValidationParameters = default, Action<JwtBearerOptions> jwtBearerConfigure = null, bool enableGlobalAuthorize = false)
         {
-            var services = authenticationBuilder.Services;
+            // 获取框架上下文
+            _ = JWTEncryption.GetFrameworkContext(Assembly.GetCallingAssembly());
 
             // 配置 JWT 选项
-            ConfigureJWTOptions(services);
-
-            // 获取配置选项
-            using var serviceProvider = services.BuildServiceProvider();
-            var jwtSettings = serviceProvider.GetService<IOptions<JWTSettingsOptions>>().Value;
+            ConfigureJWTOptions(authenticationBuilder.Services);
 
             // 添加授权
             authenticationBuilder.AddJwtBearer(options =>
             {
+                // 反射获取全局配置
+                var jwtSettings = JWTEncryption.FrameworkApp.GetMethod("GetOptions").MakeGenericMethod(typeof(JWTSettingsOptions)).Invoke(null, new object[] { null }) as JWTSettingsOptions;
+
+                // 配置 JWT 验证信息
                 options.TokenValidationParameters = (tokenValidationParameters as TokenValidationParameters) ?? JWTEncryption.CreateTokenValidationParameters(jwtSettings);
 
                 // 添加自定义配置
@@ -62,7 +57,7 @@ namespace Microsoft.Extensions.DependencyInjection
             //启用全局授权
             if (enableGlobalAuthorize)
             {
-                services.Configure<MvcOptions>(options =>
+                authenticationBuilder.Services.Configure<MvcOptions>(options =>
                 {
                     options.Filters.Add(new AuthorizeFilter());
                 });
@@ -81,28 +76,22 @@ namespace Microsoft.Extensions.DependencyInjection
         /// <returns></returns>
         public static AuthenticationBuilder AddJwt(this IServiceCollection services, Action<AuthenticationOptions> authenticationConfigure = null, object tokenValidationParameters = default, Action<JwtBearerOptions> jwtBearerConfigure = null)
         {
-            // 配置 JWT 选项
-            ConfigureJWTOptions(services);
-
-            // 获取配置选项
-            using var serviceProvider = services.BuildServiceProvider();
-            var jwtSettings = serviceProvider.GetService<IOptions<JWTSettingsOptions>>().Value;
+            // 获取框架上下文
+            _ = JWTEncryption.GetFrameworkContext(Assembly.GetCallingAssembly());
 
             // 添加默认授权
-            return services.AddAuthentication(options =>
-            {
-                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+            var authenticationBuilder = services.AddAuthentication(options =>
+             {
+                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                 options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
 
-                // 添加自定义配置
-                authenticationConfigure?.Invoke(options);
-            }).AddJwtBearer(options =>
-            {
-                options.TokenValidationParameters = (tokenValidationParameters as TokenValidationParameters) ?? JWTEncryption.CreateTokenValidationParameters(jwtSettings);
+                 // 添加自定义配置
+                 authenticationConfigure?.Invoke(options);
+             });
 
-                // 添加自定义配置
-                jwtBearerConfigure?.Invoke(options);
-            });
+            AddJwt(authenticationBuilder, tokenValidationParameters, jwtBearerConfigure);
+
+            return authenticationBuilder;
         }
 
         /// <summary>
@@ -118,8 +107,8 @@ namespace Microsoft.Extensions.DependencyInjection
         public static AuthenticationBuilder AddJwt<TAuthorizationHandler>(this IServiceCollection services, Action<AuthenticationOptions> authenticationConfigure = null, object tokenValidationParameters = default, Action<JwtBearerOptions> jwtBearerConfigure = null, bool enableGlobalAuthorize = false)
             where TAuthorizationHandler : class, IAuthorizationHandler
         {
-            // 加载 Furion 程序集
-            var furionAssembly = Assembly.Load("Furion");
+            // 植入 Furion 框架
+            var furionAssembly = JWTEncryption.GetFrameworkContext(Assembly.GetCallingAssembly());
 
             // 获取添加授权类型
             var authorizationServiceCollectionExtensionsType = furionAssembly.GetType("Microsoft.Extensions.DependencyInjection.AuthorizationServiceCollectionExtensions");
@@ -140,22 +129,14 @@ namespace Microsoft.Extensions.DependencyInjection
         /// <param name="services"></param>
         private static void ConfigureJWTOptions(IServiceCollection services)
         {
-            using var serviceProvider = services.BuildServiceProvider();
-
-            // 获取配置节点
-            var jwtSettingsConfiguration = serviceProvider.GetService<IConfiguration>()
-                                                                           .GetSection("JWTSettings");
-
             // 配置验证
             services.AddOptions<JWTSettingsOptions>()
-                        .Bind(jwtSettingsConfiguration)
-                        .ValidateDataAnnotations();
-
-            // 选项后期配置
-            services.PostConfigure<JWTSettingsOptions>(options =>
-            {
-                _ = JWTEncryption.SetDefaultJwtSettings(options);
-            });
+                    .BindConfiguration("JWTSettings")
+                    .ValidateDataAnnotations()
+                    .PostConfigure(options =>
+                    {
+                        _ = JWTEncryption.SetDefaultJwtSettings(options);
+                    });
         }
     }
 }

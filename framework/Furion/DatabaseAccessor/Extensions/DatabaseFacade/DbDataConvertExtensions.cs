@@ -1,14 +1,10 @@
-﻿// -----------------------------------------------------------------------------
-// 让 .NET 开发更简单，更通用，更流行。
-// Copyright © 2020-2021 Furion, 百小僧, Baiqian Co.,Ltd.
-//
-// 框架名称：Furion
-// 框架作者：百小僧
-// 框架版本：2.7.9
-// 源码地址：Gitee： https://gitee.com/dotnetchina/Furion
-//          Github：https://github.com/monksoul/Furion
-// 开源协议：Apache-2.0（https://gitee.com/dotnetchina/Furion/blob/master/LICENSE）
-// -----------------------------------------------------------------------------
+﻿// Copyright (c) 2020-2022 百小僧, Baiqian Co.,Ltd.
+// Furion is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan PSL v2. 
+// You may obtain a copy of Mulan PSL v2 at:
+//             https://gitee.com/dotnetchina/Furion/blob/master/LICENSE 
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.  
+// See the Mulan PSL v2 for more details.
 
 using Furion.DependencyInjection;
 using Furion.Extensions;
@@ -16,6 +12,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Data;
+using System.Data.Common;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
@@ -25,7 +22,7 @@ namespace Furion.DatabaseAccessor
     /// <summary>
     /// 数据库数据转换拓展
     /// </summary>
-    [SkipScan]
+    [SuppressSniffer]
     public static class DbDataConvertExtensions
     {
         /// <summary>
@@ -183,7 +180,8 @@ namespace Furion.DatabaseAccessor
         /// <returns>List{object}</returns>
         public static List<object> ToList(this DataSet dataSet, params Type[] returnTypes)
         {
-            if (returnTypes == null || returnTypes.Length == 0) return default;
+            // 获取所有的 DataTable
+            var dataTables = dataSet.Tables;
 
             // 处理元组类型
             if (returnTypes.Length == 1 && returnTypes[0].IsValueType)
@@ -191,8 +189,11 @@ namespace Furion.DatabaseAccessor
                 returnTypes = returnTypes[0].GenericTypeArguments;
             }
 
-            // 获取所有的 DataTable
-            var dataTables = dataSet.Tables;
+            // 处理不传入 returnTypes 类型
+            if (returnTypes == null || returnTypes.Length == 0)
+            {
+                returnTypes = Enumerable.Range(0, dataTables.Count).Select(u => typeof(List<object>)).ToArray();
+            }
 
             // 处理 8 个结果集
             if (returnTypes.Length >= 8)
@@ -373,7 +374,12 @@ namespace Furion.DatabaseAccessor
                         }
 
                         // 如果 DataTable 不包含该列名，则跳过
-                        if (!dataColumns.Contains(columnName)) continue;
+                        if (!dataColumns.Contains(columnName))
+                        {
+                            var splitColumnName = string.Join('_', property.Name.SplitCamelCase());
+                            if (dataColumns.Contains(splitColumnName)) columnName = splitColumnName;
+                            else continue;
+                        }
 
                         // 获取列值
                         var columnValue = dataRow[columnName];
@@ -402,6 +408,102 @@ namespace Furion.DatabaseAccessor
         public static Task<object> ToListAsync(this DataTable dataTable, Type returnType)
         {
             return Task.FromResult(dataTable.ToList(returnType));
+        }
+
+        /// <summary>
+        /// 将 DbDataReader 转 DataTable
+        /// </summary>
+        /// <param name="dataReader"></param>
+        /// <returns></returns>
+        public static DataTable ToDataTable(this DbDataReader dataReader)
+        {
+            var dataTable = new DataTable();
+
+            // 创建列
+            for (var i = 0; i < dataReader.FieldCount; i++)
+            {
+                var dataClumn = new DataColumn
+                {
+                    DataType = dataReader.GetFieldType(i),
+                    ColumnName = dataReader.GetName(i)
+                };
+
+                dataTable.Columns.Add(dataClumn);
+            }
+
+            // 循环读取
+            while (dataReader.Read())
+            {
+                // 创建行
+                var dataRow = dataTable.NewRow();
+                for (var i = 0; i < dataReader.FieldCount; i++)
+                {
+                    dataRow[i] = dataReader[i];
+                }
+
+                dataTable.Rows.Add(dataRow);
+            }
+
+            return dataTable;
+        }
+
+        /// <summary>
+        /// 将 DbDataReader 转 DataSet
+        /// </summary>
+        /// <param name="dataReader"></param>
+        /// <returns></returns>
+        public static DataSet ToDataSet(this DbDataReader dataReader)
+        {
+            var dataSet = new DataSet();
+
+            do
+            {
+                // 获取元数据
+                var schemaTable = dataReader.GetSchemaTable();
+                var dataTable = new DataTable();
+
+                if (schemaTable != null)
+                {
+                    for (var i = 0; i < schemaTable.Rows.Count; i++)
+                    {
+                        var dataRow = schemaTable.Rows[i];
+
+                        var columnName = (string)dataRow["ColumnName"];
+                        var column = new DataColumn(columnName, (Type)dataRow["DataType"]);
+                        dataTable.Columns.Add(column);
+                    }
+
+                    dataSet.Tables.Add(dataTable);
+
+                    // 循环读取
+                    while (dataReader.Read())
+                    {
+                        var dataRow = dataTable.NewRow();
+
+                        for (var i = 0; i < dataReader.FieldCount; i++)
+                        {
+                            dataRow[i] = dataReader.GetValue(i);
+                        }
+
+                        dataTable.Rows.Add(dataRow);
+                    }
+                }
+                else
+                {
+                    var column = new DataColumn("RecordsAffected");
+                    dataTable.Columns.Add(column);
+                    dataSet.Tables.Add(dataTable);
+
+                    var dataRow = dataTable.NewRow();
+                    dataRow[0] = dataReader.RecordsAffected;
+                    dataTable.Rows.Add(dataRow);
+                }
+            }
+
+            // 读取下一个结果
+            while (dataReader.NextResult());
+
+            return dataSet;
         }
 
         /// <summary>

@@ -11,6 +11,8 @@ module.exports = {
   themeConfig: {
     prism: {
       additionalLanguages: ["powershell", "csharp", "sql"],
+      // theme: require("prism-react-renderer/themes/github"),
+      // darkTheme: require("prism-react-renderer/themes/dracula"),
     },
     algolia: {
       apiKey: "97723a21d903df7ca5ea618b160f03c6",
@@ -47,11 +49,11 @@ module.exports = {
           label: "配置",
           position: "left",
         },
-        { to: "blog", label: "博客", position: "left" },
+        { to: "blog", label: "博客✨", position: "left" },
         {
           to: "docs/upgrade",
           activeBasePath: "docs/upgrade",
-          label: "更新日志✨",
+          label: "更新日志",
           position: "left",
         },
         // {
@@ -148,7 +150,7 @@ module.exports = {
       ],
       copyright: `Copyright © ${
         new Date().getFullYear() - 1
-      }-${new Date().getFullYear()} Furion, Baiqian Co.,Ltd.`,
+      }-${new Date().getFullYear()} 百小僧, Baiqian Co.,Ltd.`,
       logo: {
         src: "img/chinadotnet.png",
         href: "https://gitee.com/dotnetchina",
@@ -175,4 +177,5 @@ module.exports = {
       },
     ],
   ],
+  clientModules: [require.resolve("./baidutongji.js")],
 };

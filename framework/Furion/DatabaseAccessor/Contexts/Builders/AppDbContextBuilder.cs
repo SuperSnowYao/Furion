@@ -1,14 +1,10 @@
-﻿// -----------------------------------------------------------------------------
-// 让 .NET 开发更简单，更通用，更流行。
-// Copyright © 2020-2021 Furion, 百小僧, Baiqian Co.,Ltd.
-//
-// 框架名称：Furion
-// 框架作者：百小僧
-// 框架版本：2.7.9
-// 源码地址：Gitee： https://gitee.com/dotnetchina/Furion
-//          Github：https://github.com/monksoul/Furion
-// 开源协议：Apache-2.0（https://gitee.com/dotnetchina/Furion/blob/master/LICENSE）
-// -----------------------------------------------------------------------------
+// Copyright (c) 2020-2022 百小僧, Baiqian Co.,Ltd.
+// Furion is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan PSL v2. 
+// You may obtain a copy of Mulan PSL v2 at:
+//             https://gitee.com/dotnetchina/Furion/blob/master/LICENSE 
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.  
+// See the Mulan PSL v2 for more details.
 
 using Furion.DependencyInjection;
 using Furion.Extensions;
@@ -27,7 +23,6 @@ namespace Furion.DatabaseAccessor
     /// <summary>
     /// 数据库上下文构建器
     /// </summary>
-    [SkipScan]
     internal static class AppDbContextBuilder
     {
         /// <summary>
@@ -52,7 +47,7 @@ namespace Furion.DatabaseAccessor
         {
             // 扫描程序集，获取数据库实体相关类型
             EntityCorrelationTypes = App.EffectiveTypes.Where(t => (typeof(IPrivateEntity).IsAssignableFrom(t) || typeof(IPrivateModelBuilder).IsAssignableFrom(t))
-                && t.IsClass && !t.IsAbstract && !t.IsGenericType && !t.IsInterface && !t.IsDefined(typeof(NonAutomaticAttribute), true));
+                && t.IsClass && !t.IsAbstract && !t.IsGenericType && !t.IsInterface && !t.IsDefined(typeof(ManualAttribute), true));
 
             if (EntityCorrelationTypes.Any())
             {
@@ -64,8 +59,8 @@ namespace Furion.DatabaseAccessor
 
             // 查找所有数据库函数，必须是公开静态方法，且所在父类也必须是公开静态方法
             DbFunctionMethods = App.EffectiveTypes
-                .Where(t => t.IsAbstract && t.IsSealed && t.IsClass && !t.IsDefined(typeof(NonAutomaticAttribute), true))
-                .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Static).Where(m => !m.IsDefined(typeof(SkipScanAttribute), false) && m.IsDefined(typeof(QueryableFunctionAttribute), true)));
+                .Where(t => t.IsAbstract && t.IsSealed && t.IsClass && !t.IsDefined(typeof(ManualAttribute), true))
+                .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Static).Where(m => !m.IsDefined(typeof(SuppressSnifferAttribute), false) && m.IsDefined(typeof(QueryableFunctionAttribute), true)));
         }
 
         /// <summary>
@@ -169,7 +164,9 @@ namespace Furion.DatabaseAccessor
             // 判断是否是启用了多租户模式，如果是，则获取 Schema
             var dynamicSchema = !typeof(IMultiTenantOnSchema).IsAssignableFrom(dbContextType)
                 ? default
-                : dbContextType.GetMethod(nameof(IMultiTenantOnSchema.GetSchemaName)).Invoke(dbContext, null)?.ToString();
+                : (dbContextType.GetMethod(nameof(IMultiTenantOnSchema.GetSchemaName))  // 支持显式和隐式
+                        ?? typeof(IMultiTenantOnSchema).GetMethod(nameof(IMultiTenantOnSchema.GetSchemaName))
+                    )?.Invoke(dbContext, null)?.ToString();
 
             // 获取类型前缀 [TablePrefix] 特性
             var tablePrefixAttribute = !type.IsDefined(typeof(TablePrefixAttribute), true)
@@ -184,7 +181,7 @@ namespace Furion.DatabaseAccessor
             else
             {
                 // 添加表统一前后缀，排除视图
-                if (!string.IsNullOrWhiteSpace(appDbContextAttribute.TableSuffix) || !string.IsNullOrWhiteSpace(appDbContextAttribute.TableSuffix))
+                if (!string.IsNullOrWhiteSpace(appDbContextAttribute.TablePrefix) || !string.IsNullOrWhiteSpace(appDbContextAttribute.TableSuffix))
                 {
                     var tablePrefix = appDbContextAttribute.TablePrefix;
                     var tableSuffix = appDbContextAttribute.TableSuffix;
@@ -228,9 +225,11 @@ namespace Furion.DatabaseAccessor
             // 只应用于扫描的最后配置
             var lastEntityMutableTableType = entityMutableTableTypes.Last();
 
-            var instance = Activator.CreateInstance(lastEntityMutableTableType);
-            var getTableNameMethod = lastEntityMutableTableType.GetMethod("GetTableName");
-            var tableName = getTableNameMethod.Invoke(instance, new object[] { dbContext, dbContextLocator });
+            // 支持显式和隐式查找
+            var getTableNameMethod = lastEntityMutableTableType.GetMethod("GetTableName")
+                ?? typeof(IPrivateEntityMutableTable<>).MakeGenericType(entityType).GetMethod("GetTableName");
+
+            var tableName = getTableNameMethod?.Invoke(Activator.CreateInstance(lastEntityMutableTableType), new object[] { dbContext, dbContextLocator });
             if (tableName != null)
             {
                 // 设置动态表名
@@ -316,13 +315,17 @@ namespace Furion.DatabaseAccessor
             // 调用数据库实体自定义配置
             foreach (var entityTypeBuilderType in entityTypeBuilderTypes)
             {
-                var instance = Activator.CreateInstance(entityTypeBuilderType);
-                var configureMethod = entityTypeBuilderType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                // 支持显式和隐式接口查找
+                var configureMethod = (entityTypeBuilderType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                                                    .Concat(typeof(IPrivateEntityTypeBuilder<>).MakeGenericType(entityType).GetMethods()))
                                                                    .Where(u => u.Name == "Configure"
                                                                         && u.GetParameters().Length > 0
                                                                         && u.GetParameters().First().ParameterType == typeof(EntityTypeBuilder<>).MakeGenericType(entityType))
                                                                    .FirstOrDefault();
 
+                if (configureMethod == null) continue;
+
+                var instance = Activator.CreateInstance(entityTypeBuilderType);
                 configureMethod.Invoke(instance, new object[] { entityBuilder, dbContext, dbContextLocator });
             }
         }
@@ -349,9 +352,12 @@ namespace Furion.DatabaseAccessor
             // 加载种子配置数据
             foreach (var entitySeedDataType in entitySeedDataTypes)
             {
-                var instance = Activator.CreateInstance(entitySeedDataType);
-                var hasDataMethod = entitySeedDataType.GetMethod("HasData");
+                // 支持显式和隐式接口查找
+                var hasDataMethod = entitySeedDataType.GetMethod("HasData")
+                    ?? typeof(IPrivateEntitySeedData<>).MakeGenericType(entityType).GetMethod("HasData");
+                if (hasDataMethod == null) continue;
 
+                var instance = Activator.CreateInstance(entitySeedDataType);
                 var seedData = ((IList)hasDataMethod?.Invoke(instance, new object[] { dbContext, dbContextLocator }))?.Cast<object>();
                 if (seedData == null) continue;
 
@@ -448,8 +454,8 @@ namespace Furion.DatabaseAccessor
                 // 组装对象
                 foreach (var entityCorrelationType in dbContextEntityCorrelationTypes)
                 {
-                    // 只要继承 IEntityDependency 接口，都是实体
-                    if (typeof(IPrivateEntity).IsAssignableFrom(entityCorrelationType))
+                    // 只要继承 IEntityDependency 接口，都是实体，且不贴 [NotMapper] 特性
+                    if (typeof(IPrivateEntity).IsAssignableFrom(entityCorrelationType) && !entityCorrelationType.IsDefined(typeof(NotMappedAttribute), false))
                     {
                         // 添加实体
                         result.EntityTypes.Add(entityCorrelationType);
@@ -478,7 +484,7 @@ namespace Furion.DatabaseAccessor
                             if (typeof(DbContext).IsAssignableFrom(entityCorrelationType))
                             {
                                 // 判断是否已经注册了上下文并且是否等于当前上下文
-                                if (Penetrates.DbContextWithLocatorCached.Values.Contains(entityCorrelationType) && entityCorrelationType == dbContext.GetType())
+                                if (Penetrates.DbContextDescriptors.Values.Contains(entityCorrelationType) && entityCorrelationType == dbContext.GetType())
                                 {
                                     result.ModelBuilderFilterInstances.Add(dbContext as IPrivateModelBuilderFilter);
                                 }

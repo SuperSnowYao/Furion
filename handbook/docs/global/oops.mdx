@@ -34,6 +34,12 @@ throw Oops.Oh(1000, typeof(ArgumentNullException), "出错了");
 
 ## 4.5 异常方法重试
 
+:::important 调整说明
+
+`v2.17.0+` 版本下面方法请使用 `Retry.Invoke()` 替代。
+
+:::
+
 ```cs
 Oops.Retry(() => {
     // Do.....
@@ -48,4 +54,11 @@ var value = Oops.Retry<int>(() => {
 Oops.Retry(() => {
 
 }, 3, 1000, typeof(ArgumentNullException));
+```
+
+## 4.6 抛出业务异常
+
+```cs
+throw Oops.Bah("用户名或密码错误");
+throw Oops.Bah(1000);
 ```

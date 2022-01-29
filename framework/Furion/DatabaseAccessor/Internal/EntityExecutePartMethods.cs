@@ -1,14 +1,10 @@
-﻿// -----------------------------------------------------------------------------
-// 让 .NET 开发更简单，更通用，更流行。
-// Copyright © 2020-2021 Furion, 百小僧, Baiqian Co.,Ltd.
-//
-// 框架名称：Furion
-// 框架作者：百小僧
-// 框架版本：2.7.9
-// 源码地址：Gitee： https://gitee.com/dotnetchina/Furion
-//          Github：https://github.com/monksoul/Furion
-// 开源协议：Apache-2.0（https://gitee.com/dotnetchina/Furion/blob/master/LICENSE）
-// -----------------------------------------------------------------------------
+﻿// Copyright (c) 2020-2022 百小僧, Baiqian Co.,Ltd.
+// Furion is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan PSL v2. 
+// You may obtain a copy of Mulan PSL v2 at:
+//             https://gitee.com/dotnetchina/Furion/blob/master/LICENSE 
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.  
+// See the Mulan PSL v2 for more details.
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -780,64 +776,6 @@ namespace Furion.DatabaseAccessor
         public Task<EntityEntry<TEntity>> DeleteNowAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
         {
             return GetRepository().DeleteNowAsync(Entity, acceptAllChangesOnSuccess, cancellationToken);
-        }
-
-        /// <summary>
-        /// 假删除
-        /// </summary>
-        /// <returns></returns>
-        public EntityEntry<TEntity> FakeDelete()
-        {
-            return GetRepository().FakeDelete(Entity);
-        }
-
-        /// <summary>
-        /// 假删除
-        /// </summary>
-        /// <returns></returns>
-        public Task<EntityEntry<TEntity>> FakeDeleteAsync()
-        {
-            return GetRepository().FakeDeleteAsync(Entity);
-        }
-
-        /// <summary>
-        /// 假删除并立即提交
-        /// </summary>
-        /// <returns></returns>
-        public EntityEntry<TEntity> FakeDeleteNow()
-        {
-            return GetRepository().FakeDeleteNow(Entity);
-        }
-
-        /// <summary>
-        /// 假删除并立即提交
-        /// </summary>
-        /// <param name="acceptAllChangesOnSuccess">接受所有更改</param>
-        /// <returns></returns>
-        public EntityEntry<TEntity> FakeDeleteNow(bool acceptAllChangesOnSuccess)
-        {
-            return GetRepository().FakeDeleteNow(Entity, acceptAllChangesOnSuccess);
-        }
-
-        /// <summary>
-        /// 假删除并立即提交
-        /// </summary>
-        /// <param name="cancellationToken">异步取消令牌</param>
-        /// <returns></returns>
-        public Task<EntityEntry<TEntity>> FakeDeleteNowAsync(CancellationToken cancellationToken = default)
-        {
-            return GetRepository().FakeDeleteNowAsync(Entity, cancellationToken);
-        }
-
-        /// <summary>
-        /// 假删除并立即提交
-        /// </summary>
-        /// <param name="acceptAllChangesOnSuccess">接受所有更改</param>
-        /// <param name="cancellationToken">异步取消令牌</param>
-        /// <returns></returns>
-        public Task<EntityEntry<TEntity>> FakeDeleteNowAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
-        {
-            return GetRepository().FakeDeleteNowAsync(Entity, acceptAllChangesOnSuccess, cancellationToken);
         }
 
         /// <summary>

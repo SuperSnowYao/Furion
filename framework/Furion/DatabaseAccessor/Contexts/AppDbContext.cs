@@ -1,14 +1,10 @@
-// -----------------------------------------------------------------------------
-// 让 .NET 开发更简单，更通用，更流行。
-// Copyright © 2020-2021 Furion, 百小僧, Baiqian Co.,Ltd.
-//
-// 框架名称：Furion
-// 框架作者：百小僧
-// 框架版本：2.7.9
-// 源码地址：Gitee： https://gitee.com/dotnetchina/Furion
-//          Github：https://github.com/monksoul/Furion
-// 开源协议：Apache-2.0（https://gitee.com/dotnetchina/Furion/blob/master/LICENSE）
-// -----------------------------------------------------------------------------
+// Copyright (c) 2020-2022 百小僧, Baiqian Co.,Ltd.
+// Furion is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan PSL v2. 
+// You may obtain a copy of Mulan PSL v2 at:
+//             https://gitee.com/dotnetchina/Furion/blob/master/LICENSE 
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.  
+// See the Mulan PSL v2 for more details.
 
 using Furion.DependencyInjection;
 using Furion.Extensions;
@@ -31,7 +27,7 @@ namespace Furion.DatabaseAccessor
     /// 默认应用数据库上下文
     /// </summary>
     /// <typeparam name="TDbContext">数据库上下文</typeparam>
-    [SkipScan]
+    [SuppressSniffer]
     public abstract class AppDbContext<TDbContext> : AppDbContext<TDbContext, MasterDbContextLocator>
         where TDbContext : DbContext
     {
@@ -49,7 +45,7 @@ namespace Furion.DatabaseAccessor
     /// </summary>
     /// <typeparam name="TDbContext">数据库上下文</typeparam>
     /// <typeparam name="TDbContextLocator">数据库上下文定位器</typeparam>
-    [SkipScan]
+    [SuppressSniffer]
     public abstract class AppDbContext<TDbContext, TDbContextLocator> : DbContext
         where TDbContext : DbContext
         where TDbContextLocator : class, IDbContextLocator
@@ -131,6 +127,11 @@ namespace Furion.DatabaseAccessor
         public virtual bool FailedAutoRollback { get; protected set; } = true;
 
         /// <summary>
+        /// 支持工作单元共享事务
+        /// </summary>
+        public virtual bool UseUnitOfWork { get; protected set; } = true;
+
+        /// <summary>
         /// 获取租户信息
         /// </summary>
         public virtual Tenant Tenant
@@ -153,7 +154,7 @@ namespace Furion.DatabaseAccessor
                 // 从分布式缓存中读取或查询数据库
                 var tenantCachedKey = $"MULTI_TENANT:{host}";
                 var distributedCache = serviceProvider.GetService<IDistributedCache>();
-                var cachedValue = distributedCache.GetString(tenantCachedKey);
+                var cachedValue = distributedCache?.GetString(tenantCachedKey);
 
                 // 当前租户
                 Tenant currentTenant;
@@ -164,14 +165,17 @@ namespace Furion.DatabaseAccessor
                 // 如果 Key 不存在
                 if (string.IsNullOrWhiteSpace(cachedValue))
                 {
-                    // 获取新的租户数据库上下文
-                    var tenantDbContext = serviceProvider.GetService<Func<Type, ITransient, DbContext>>()(typeof(MultiTenantDbContextLocator), default);
-                    if (tenantDbContext == null) return default;
+                    // 解析租户上下文
+                    var dbContextResolve = serviceProvider.GetService<Func<Type, IScoped, DbContext>>();
+                    if (dbContextResolve == null) return default;
+
+                    var tenantDbContext = dbContextResolve(typeof(MultiTenantDbContextLocator), default);
+                    ((dynamic)tenantDbContext).UseUnitOfWork = false;   // 无需载入事务
 
                     currentTenant = tenantDbContext.Set<Tenant>().AsNoTracking().FirstOrDefault(u => u.Host == host);
                     if (currentTenant != null)
                     {
-                        distributedCache.SetString(tenantCachedKey, jsonSerializerProvider.Serialize(currentTenant));
+                        distributedCache?.SetString(tenantCachedKey, jsonSerializerProvider.Serialize(currentTenant));
                     }
                 }
                 else currentTenant = jsonSerializerProvider.Deserialize<Tenant>(cachedValue);
@@ -187,7 +191,7 @@ namespace Furion.DatabaseAccessor
         /// <param name="dbContext">数据库上下文</param>
         /// <param name="onTableTenantId">多租户Id属性名</param>
         /// <returns>表达式</returns>
-        protected virtual LambdaExpression TenantIdQueryFilterExpression(EntityTypeBuilder entityBuilder, DbContext dbContext, string onTableTenantId = default)
+        protected virtual LambdaExpression BuildTenantQueryFilter(EntityTypeBuilder entityBuilder, DbContext dbContext, string onTableTenantId = default)
         {
             onTableTenantId ??= Db.OnTableTenantId;
 
@@ -201,32 +205,6 @@ namespace Furion.DatabaseAccessor
             var propertyValue = Expression.Call(Expression.Constant(dbContext), dbContext.GetType().GetMethod(nameof(IMultiTenantOnTable.GetTenantId)));
 
             var expressionBody = Expression.Equal(Expression.Call(typeof(EF), nameof(EF.Property), new[] { typeof(object) }, parameter, properyName), propertyValue);
-            var expression = Expression.Lambda(expressionBody, parameter);
-            return expression;
-        }
-
-        /// <summary>
-        /// 构建假删除查询过滤器表达式
-        /// </summary>
-        /// <param name="entityBuilder">实体类型构建器</param>
-        /// <param name="dbContext">数据库上下文</param>
-        /// <param name="isDeletedKey">软删除属性名</param>
-        /// <param name="filterValue">过滤的值</param>
-        /// <returns>表达式</returns>
-        protected virtual LambdaExpression FakeDeleteQueryFilterExpression(EntityTypeBuilder entityBuilder, DbContext dbContext, string isDeletedKey = default, object filterValue = default)
-        {
-            isDeletedKey ??= nameof(Entity.IsDeleted);
-
-            // 获取实体构建器元数据
-            var metadata = entityBuilder.Metadata;
-            if (metadata.FindProperty(isDeletedKey) == null) return default;
-
-            // 创建表达式元素
-            var parameter = Expression.Parameter(metadata.ClrType, "u");
-            var properyName = Expression.Constant(isDeletedKey);
-            var propertyValue = Expression.Constant(filterValue ?? false);
-
-            var expressionBody = Expression.Equal(Expression.Call(typeof(EF), nameof(EF.Property), new[] { typeof(bool) }, parameter, properyName), propertyValue);
             var expression = Expression.Lambda(expressionBody, parameter);
             return expression;
         }
@@ -249,8 +227,8 @@ namespace Furion.DatabaseAccessor
                 var dbContext = eventData.Context;
 
                 // 获取获取数据库操作上下文，跳过贴了 [NotChangedListener] 特性的实体
-                ChangeTrackerEntities = (dbContext).ChangeTracker.Entries()
-                    .Where(u => !u.Entity.GetType().IsDefined(typeof(NotChangedListenerAttribute), true) && (u.State == EntityState.Added || u.State == EntityState.Modified || u.State == EntityState.Deleted)).ToDictionary(u => u, u => u.GetDatabaseValues());
+                ChangeTrackerEntities = dbContext.ChangeTracker.Entries()
+                    .Where(u => !u.Entity.GetType().IsDefined(typeof(SuppressChangedListenerAttribute), true) && (u.State == EntityState.Added || u.State == EntityState.Modified || u.State == EntityState.Deleted)).ToDictionary(u => u, u => u.GetDatabaseValues());
 
                 AttachEntityChangedListener(eventData.Context, "OnChanging", ChangeTrackerEntities);
             }
@@ -269,6 +247,9 @@ namespace Furion.DatabaseAccessor
             if (EnabledEntityChangedListener) AttachEntityChangedListener(eventData.Context, "OnChanged", ChangeTrackerEntities);
 
             SavedChangesEvent(eventData, result);
+
+            // 清空跟踪实体
+            ChangeTrackerEntities.Clear();
         }
 
         /// <summary>
@@ -281,6 +262,9 @@ namespace Furion.DatabaseAccessor
             if (EnabledEntityChangedListener) AttachEntityChangedListener(eventData.Context, "OnChangeFailed", ChangeTrackerEntities);
 
             SaveChangesFailedEvent(eventData);
+
+            // 清空跟踪实体
+            ChangeTrackerEntities.Clear();
         }
 
         /// <summary>
@@ -301,7 +285,7 @@ namespace Furion.DatabaseAccessor
                 var entryEntity = trackerEntities.Key;
                 var entity = entryEntity.Entity;
 
-                // 获取该实体类型的种子配置
+                // 获取该实体类型监听配置
                 var entitiesTypeByChanged = entityChangedTypes
                     .Where(u => u.GetInterfaces()
                         .Any(i => i.HasImplementedRawGeneric(typeof(IPrivateEntityChangedListener<>)) && i.GenericTypeArguments.Contains(entity.GetType())));

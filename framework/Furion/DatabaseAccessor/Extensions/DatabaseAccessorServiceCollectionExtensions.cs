@@ -1,14 +1,10 @@
-﻿// -----------------------------------------------------------------------------
-// 让 .NET 开发更简单，更通用，更流行。
-// Copyright © 2020-2021 Furion, 百小僧, Baiqian Co.,Ltd.
-//
-// 框架名称：Furion
-// 框架作者：百小僧
-// 框架版本：2.7.9
-// 源码地址：Gitee： https://gitee.com/dotnetchina/Furion
-//          Github：https://github.com/monksoul/Furion
-// 开源协议：Apache-2.0（https://gitee.com/dotnetchina/Furion/blob/master/LICENSE）
-// -----------------------------------------------------------------------------
+﻿// Copyright (c) 2020-2022 百小僧, Baiqian Co.,Ltd.
+// Furion is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan PSL v2. 
+// You may obtain a copy of Mulan PSL v2 at:
+//             https://gitee.com/dotnetchina/Furion/blob/master/LICENSE 
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.  
+// See the Mulan PSL v2 for more details.
 
 using Furion.DatabaseAccessor;
 using Furion.DependencyInjection;
@@ -21,7 +17,7 @@ namespace Microsoft.Extensions.DependencyInjection
     /// <summary>
     /// 数据库访问器服务拓展类
     /// </summary>
-    [SkipScan]
+    [SuppressSniffer]
     public static class DatabaseAccessorServiceCollectionExtensions
     {
         /// <summary>
@@ -71,57 +67,12 @@ namespace Microsoft.Extensions.DependencyInjection
             // 注册多数据库仓储
             services.TryAddScoped(typeof(IDbRepository<>), typeof(DbRepository<>));
 
-            // 解析数据库上下文
-            services.AddTransient(provider =>
+            // 注册解析数据库上下文委托
+            services.TryAddScoped(provider =>
             {
-                DbContext dbContextResolve(Type locator, ITransient transient)
+                DbContext dbContextResolve(Type locator, IScoped transient)
                 {
-                    // 判断定位器是否绑定了数据库上下文
-                    var isRegistered = Penetrates.DbContextWithLocatorCached.TryGetValue(locator, out var dbContextType);
-                    if (!isRegistered) throw new InvalidOperationException($"The DbContext for locator  `{locator.FullName}` binding was not found.");
-
-                    // 动态解析数据库上下文，创建新的对象
-                    var dbContext = provider.GetService(dbContextType) as DbContext;
-
-                    // 实现动态数据库上下文功能，刷新 OnModelCreating
-                    var dbContextAttribute = DbProvider.GetAppDbContextAttribute(dbContextType);
-                    if (dbContextAttribute?.Mode == DbContextMode.Dynamic)
-                    {
-                        DynamicModelCacheKeyFactory.RebuildModels();
-                    }
-
-                    // 添加数据库上下文到池中
-                    var dbContextPool = provider.GetService<IDbContextPool>();
-                    dbContextPool?.AddToPool(dbContext);
-
-                    return dbContext;
-                }
-                return (Func<Type, ITransient, DbContext>)dbContextResolve;
-            });
-
-            services.AddScoped(provider =>
-            {
-                DbContext dbContextResolve(Type locator, IScoped serviceProvider)
-                {
-                    // 判断定位器是否绑定了数据库上下文
-                    var isRegistered = Penetrates.DbContextWithLocatorCached.TryGetValue(locator, out var dbContextType);
-                    if (!isRegistered) throw new InvalidOperationException($"The DbContext for locator `{locator.FullName}` binding was not found.");
-
-                    // 动态解析数据库上下文
-                    var dbContext = provider.GetService(dbContextType) as DbContext;
-
-                    // 实现动态数据库上下文功能，刷新 OnModelCreating
-                    var dbContextAttribute = DbProvider.GetAppDbContextAttribute(dbContextType);
-                    if (dbContextAttribute?.Mode == DbContextMode.Dynamic)
-                    {
-                        DynamicModelCacheKeyFactory.RebuildModels();
-                    }
-
-                    // 添加数据库上下文到池中
-                    var dbContextPool = provider.GetService<IDbContextPool>();
-                    dbContextPool?.AddToPool(dbContext);
-
-                    return dbContext;
+                    return ResolveDbContext(provider, locator);
                 }
                 return (Func<Type, IScoped, DbContext>)dbContextResolve;
             });
@@ -170,18 +121,41 @@ namespace Microsoft.Extensions.DependencyInjection
             where TDbContext : DbContext
             where TDbContextLocator : class, IDbContextLocator
         {
-            var dbContextLocatorType = (typeof(TDbContextLocator));
-
-            // 将数据库上下文和定位器一一保存起来
-            var isSuccess = Penetrates.DbContextWithLocatorCached.TryAdd(dbContextLocatorType, typeof(TDbContext));
-            Penetrates.DbContextLocatorTypeCached.TryAdd(dbContextLocatorType.FullName, dbContextLocatorType);
-
-            if (!isSuccess) throw new InvalidOperationException($"The locator `{dbContextLocatorType.FullName}` is bound to another DbContext.");
+            // 存储数据库上下文和定位器关系
+            Penetrates.DbContextDescriptors.AddOrUpdate(typeof(TDbContextLocator), typeof(TDbContext), (key, value) => typeof(TDbContext));
 
             // 注册数据库上下文
             services.TryAddScoped<TDbContext>();
 
             return services;
+        }
+
+        /// <summary>
+        /// 通过定位器解析上下文
+        /// </summary>
+        /// <param name="provider"></param>
+        /// <param name="dbContextLocator"></param>
+        /// <returns></returns>
+        private static DbContext ResolveDbContext(IServiceProvider provider, Type dbContextLocator)
+        {
+            // 判断数据库上下文定位器是否绑定
+            Penetrates.CheckDbContextLocator(dbContextLocator, out var dbContextType);
+
+            // 动态解析数据库上下文
+            var dbContext = provider.GetService(dbContextType) as DbContext;
+
+            // 实现动态数据库上下文功能，刷新 OnModelCreating
+            var dbContextAttribute = DbProvider.GetAppDbContextAttribute(dbContextType);
+            if (dbContextAttribute?.Mode == DbContextMode.Dynamic)
+            {
+                DynamicModelCacheKeyFactory.RebuildModels();
+            }
+
+            // 添加数据库上下文到池中
+            var dbContextPool = provider.GetService<IDbContextPool>();
+            dbContextPool?.AddToPool(dbContext);
+
+            return dbContext;
         }
     }
 }

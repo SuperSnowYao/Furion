@@ -1,7 +1,7 @@
 ---
 id: deploy-docker
-title: 33.2 在 Docker 部署
-sidebar_label: 33.2 在 Docker 部署
+title: 34.2 在 Docker 部署
+sidebar_label: 34.2 在 Docker 部署
 ---
 
 import useBaseUrl from "@docusaurus/useBaseUrl";
@@ -19,16 +19,16 @@ import useBaseUrl from "@docusaurus/useBaseUrl";
 
 :::
 
-## 33.2.1 关于 `Docker` 部署
+## 34.2.1 关于 `Docker` 部署
 
 在 `Docker` 中部署网站有两种方式：
 
 - `发布后构建`：此方式是先发布网站后在再构建镜像，这样可以减少不必要的构建层，而且还能缩减镜像大小。**（推荐）**
 - `编译+构建+发布`：也就是说在 `Dockerfile` 中配置网站从构建到发布的完整过程，此方式会速度慢，而且会产生冗余层，增加镜像大小。
 
-## 33.2.2 两种方式构建
+## 34.2.2 两种方式构建
 
-### 33.2.2.1 发布后构建
+### 34.2.2.1 发布后构建
 
 - 👉 发布网站
 
@@ -37,7 +37,7 @@ import useBaseUrl from "@docusaurus/useBaseUrl";
 - 👉 编写 `Dockerfile`
 
 ```bash
-FROM mcr.microsoft.com/dotnet/aspnet:5.0.6
+FROM mcr.microsoft.com/dotnet/aspnet:5.0.12
 WORKDIR /app
 EXPOSE 80
 EXPOSE 443
@@ -83,7 +83,7 @@ docker tag 网站名称:网站版本号 docker账号名/网站名称:网站版�
 如：
 
 ```bash
-docker tag furion:v2.7.8 monksoul/furion:v2.7.8
+docker tag furion:v2.20.3 monksoul/furion:v2.20.3
 ```
 
 - 👉 登录 `docker`
@@ -101,12 +101,12 @@ docker push docker账号名/网站名称:网站版本号
 如：
 
 ```bash
-docker push monksoul/furion:v2.7.8
+docker push monksoul/furion:v2.20.3
 ```
 
 :::
 
-### 33.2.2.2 编译+构建+发布
+### 34.2.2.2 编译+构建+发布
 
 此方式可以偷懒，但是不太推荐，不过在某些场景下非常有用，就是集成 `Devops` 工具链可以做到一步到位。
 
@@ -115,7 +115,7 @@ docker push monksoul/furion:v2.7.8
 这种方式只需要把 `Dockerfile` 内容替换成以下即可：
 
 ```bash {6}
-FROM mcr.microsoft.com/dotnet/sdk:5.0.6 AS build
+FROM mcr.microsoft.com/dotnet/sdk:5.0.12 AS build
 WORKDIR /source
 
 # Download Source
@@ -131,7 +131,7 @@ RUN dotnet restore
 RUN dotnet publish -c release -o /app --no-restore
 
 # Run
-FROM mcr.microsoft.com/dotnet/aspnet:5.0.6
+FROM mcr.microsoft.com/dotnet/aspnet:5.0.12
 WORKDIR /app
 COPY --from=build /app ./
 EXPOSE 80
@@ -143,7 +143,7 @@ ENTRYPOINT ["dotnet", "Furion.Web.Entry.dll"]
 
 接下来的步骤和上述步骤一致，不再重复编写
 
-## 33.2.3 反馈与建议
+## 34.2.3 反馈与建议
 
 :::note 与我们交流
 

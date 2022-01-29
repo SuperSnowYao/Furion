@@ -1,20 +1,15 @@
-﻿// -----------------------------------------------------------------------------
-// 让 .NET 开发更简单，更通用，更流行。
-// Copyright © 2020-2021 Furion, 百小僧, Baiqian Co.,Ltd.
-//
-// 框架名称：Furion
-// 框架作者：百小僧
-// 框架版本：2.7.9
-// 源码地址：Gitee： https://gitee.com/dotnetchina/Furion
-//          Github：https://github.com/monksoul/Furion
-// 开源协议：Apache-2.0（https://gitee.com/dotnetchina/Furion/blob/master/LICENSE）
-// -----------------------------------------------------------------------------
+﻿// Copyright (c) 2020-2022 百小僧, Baiqian Co.,Ltd.
+// Furion is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan PSL v2. 
+// You may obtain a copy of Mulan PSL v2 at:
+//             https://gitee.com/dotnetchina/Furion/blob/master/LICENSE 
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.  
+// See the Mulan PSL v2 for more details.
 
 using Furion.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
-using StackExchange.Profiling;
-using StackExchange.Profiling.Data;
 using System;
 using System.Collections.Concurrent;
 using System.Data;
@@ -28,7 +23,7 @@ namespace Furion.DatabaseAccessor
     /// <summary>
     /// 数据库上下文池
     /// </summary>
-    [SkipScan]
+    [SuppressSniffer]
     public class DbContextPool : IDbContextPool
     {
         /// <summary>
@@ -49,12 +44,12 @@ namespace Furion.DatabaseAccessor
         /// <summary>
         /// 线程安全的数据库上下文集合
         /// </summary>
-        private readonly ConcurrentDictionary<Guid, DbContext> dbContexts;
+        private readonly ConcurrentDictionary<Guid, DbContext> _dbContexts;
 
         /// <summary>
         /// 登记错误的数据库上下文
         /// </summary>
-        private readonly ConcurrentDictionary<Guid, DbContext> failedDbContexts;
+        private readonly ConcurrentDictionary<Guid, DbContext> _failedDbContexts;
 
         /// <summary>
         /// 服务提供器
@@ -72,8 +67,8 @@ namespace Furion.DatabaseAccessor
             InjectMiniProfiler = App.Settings.InjectMiniProfiler.Value;
             IsPrintDbConnectionInfo = App.Settings.PrintDbConnectionInfo.Value;
 
-            dbContexts = new ConcurrentDictionary<Guid, DbContext>();
-            failedDbContexts = new ConcurrentDictionary<Guid, DbContext>();
+            _dbContexts = new ConcurrentDictionary<Guid, DbContext>();
+            _failedDbContexts = new ConcurrentDictionary<Guid, DbContext>();
         }
 
         /// <summary>
@@ -87,7 +82,7 @@ namespace Furion.DatabaseAccessor
         /// <returns></returns>
         public ConcurrentDictionary<Guid, DbContext> GetDbContexts()
         {
-            return dbContexts;
+            return _dbContexts;
         }
 
         /// <summary>
@@ -96,37 +91,35 @@ namespace Furion.DatabaseAccessor
         /// <param name="dbContext"></param>
         public void AddToPool(DbContext dbContext)
         {
+            // 跳过非关系型数据库
+            if (!dbContext.Database.IsRelational()) return;
+
             var instanceId = dbContext.ContextId.InstanceId;
+            if (!_dbContexts.TryAdd(instanceId, dbContext)) return;
 
-            var canAdd = dbContexts.TryAdd(instanceId, dbContext);
-            if (canAdd)
+            // 订阅数据库上下文操作失败事件
+            dbContext.SaveChangesFailed += (s, e) =>
             {
-                // 订阅数据库上下文操作失败事件
-                dbContext.SaveChangesFailed += (s, e) =>
-                {
-                    // 排除已经存在的数据库上下文
-                    var canAdd = failedDbContexts.TryAdd(instanceId, dbContext);
-                    if (canAdd)
-                    {
-                        dynamic context = s as DbContext;
+                // 排除已经存在的数据库上下文
+                if (!_failedDbContexts.TryAdd(instanceId, dbContext)) return;
 
-                        // 当前事务
-                        var database = context.Database;
-                        var currentTransaction = database.CurrentTransaction;
-                        if (currentTransaction != null && context.FailedAutoRollback == true)
-                        {
-                            // 获取数据库连接信息
-                            var connection = database.GetDbConnection();
+                // 当前事务
+                dynamic context = s as DbContext;
+                var database = context.Database as DatabaseFacade;
+                var currentTransaction = database?.CurrentTransaction;
 
-                            // 回滚事务
-                            currentTransaction.Rollback();
+                // 只有事务不等于空且支持自动回滚
+                if (!(currentTransaction != null && context.FailedAutoRollback == true)) return;
 
-                            // 打印事务回滚消息
-                            App.PrintToMiniProfiler("transaction", "Rollback", $"[Connection Id: {context.ContextId}] / [Database: {connection.Database}]{(IsPrintDbConnectionInfo ? $" / [Connection String: {connection.ConnectionString}]" : string.Empty)}", isError: true);
-                        }
-                    }
-                };
-            }
+                // 获取数据库连接信息
+                var connection = database.GetDbConnection();
+
+                // 回滚事务
+                currentTransaction.Rollback();
+
+                // 打印事务回滚消息
+                App.PrintToMiniProfiler("transaction", "Rollback", $"[Connection Id: {context.ContextId}] / [Database: {connection.Database}]{(IsPrintDbConnectionInfo ? $" / [Connection String: {connection.ConnectionString}]" : string.Empty)}", isError: true);
+            };
         }
 
         /// <summary>
@@ -146,8 +139,8 @@ namespace Furion.DatabaseAccessor
         public int SavePoolNow()
         {
             // 查找所有已改变的数据库上下文并保存更改
-            return dbContexts
-                .Where(u => u.Value != null && u.Value.ChangeTracker.HasChanges() && !failedDbContexts.Contains(u))
+            return _dbContexts
+                .Where(u => u.Value != null && u.Value.ChangeTracker.HasChanges() && !_failedDbContexts.Contains(u))
                 .Select(u => u.Value.SaveChanges()).Count();
         }
 
@@ -159,8 +152,8 @@ namespace Furion.DatabaseAccessor
         public int SavePoolNow(bool acceptAllChangesOnSuccess)
         {
             // 查找所有已改变的数据库上下文并保存更改
-            return dbContexts
-                .Where(u => u.Value != null && u.Value.ChangeTracker.HasChanges() && !failedDbContexts.Contains(u))
+            return _dbContexts
+                .Where(u => u.Value != null && u.Value.ChangeTracker.HasChanges() && !_failedDbContexts.Contains(u))
                 .Select(u => u.Value.SaveChanges(acceptAllChangesOnSuccess)).Count();
         }
 
@@ -172,8 +165,8 @@ namespace Furion.DatabaseAccessor
         public async Task<int> SavePoolNowAsync(CancellationToken cancellationToken = default)
         {
             // 查找所有已改变的数据库上下文并保存更改
-            var tasks = dbContexts
-                .Where(u => u.Value != null && u.Value.ChangeTracker.HasChanges() && !failedDbContexts.Contains(u))
+            var tasks = _dbContexts
+                .Where(u => u.Value != null && u.Value.ChangeTracker.HasChanges() && !_failedDbContexts.Contains(u))
                 .Select(u => u.Value.SaveChangesAsync(cancellationToken));
 
             // 等待所有异步完成
@@ -190,8 +183,8 @@ namespace Furion.DatabaseAccessor
         public async Task<int> SavePoolNowAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
         {
             // 查找所有已改变的数据库上下文并保存更改
-            var tasks = dbContexts
-                .Where(u => u.Value != null && u.Value.ChangeTracker.HasChanges() && !failedDbContexts.Contains(u))
+            var tasks = _dbContexts
+                .Where(u => u.Value != null && u.Value.ChangeTracker.HasChanges() && !_failedDbContexts.Contains(u))
                 .Select(u => u.Value.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken));
 
             // 等待所有异步完成
@@ -207,22 +200,18 @@ namespace Furion.DatabaseAccessor
         public void BeginTransaction(bool ensureTransaction = false)
         {
         // 判断 dbContextPool 中是否包含DbContext，如果是，则使用第一个数据库上下文开启事务，并应用于其他数据库上下文
-        EnsureTransaction: if (dbContexts.Any())
+        EnsureTransaction: if (_dbContexts.Any())
             {
                 // 如果共享事务不为空，则直接共享
                 if (DbContextTransaction != null) goto ShareTransaction;
 
                 // 先判断是否已经有上下文开启了事务
-                var transactionDbContext = dbContexts.FirstOrDefault(u => u.Value.Database.CurrentTransaction != null);
-                if (transactionDbContext.Value != null)
-                {
-                    DbContextTransaction = transactionDbContext.Value.Database.CurrentTransaction;
-                }
-                else
-                {
-                    // 如果没有任何上下文有事务，则将第一个开启事务
-                    DbContextTransaction = dbContexts.First().Value.Database.BeginTransaction();
-                }
+                var transactionDbContext = _dbContexts.FirstOrDefault(u => u.Value.Database.CurrentTransaction != null);
+
+                DbContextTransaction = transactionDbContext.Value != null
+                       ? transactionDbContext.Value.Database.CurrentTransaction
+                       // 如果没有任何上下文有事务，则将第一个开启事务
+                       : _dbContexts.First().Value.Database.BeginTransaction();
 
             // 共享事务
             ShareTransaction: ShareTransaction(DbContextTransaction.GetDbTransaction());
@@ -233,15 +222,15 @@ namespace Furion.DatabaseAccessor
             else
             {
                 // 判断是否确保事务强制可用（此处是无奈之举）
-                if (ensureTransaction)
-                {
-                    var defaultDbContextLocator = Penetrates.DbContextWithLocatorCached.LastOrDefault();
-                    if (defaultDbContextLocator.Key == null) return;
+                if (!ensureTransaction) return;
 
-                    // 创建一个新的上下文
-                    var newDbContext = Db.GetDbContext(defaultDbContextLocator.Key, _serviceProvider);
-                    goto EnsureTransaction;
-                }
+                var defaultDbContextLocator = Penetrates.DbContextDescriptors.LastOrDefault();
+                if (defaultDbContextLocator.Key == null) return;
+
+                // 创建一个新的上下文
+                var newDbContext = Db.GetDbContext(defaultDbContextLocator.Key, _serviceProvider);
+                DbContextTransaction = newDbContext.Database.BeginTransaction();
+                goto EnsureTransaction;
             }
         }
 
@@ -309,16 +298,16 @@ namespace Furion.DatabaseAccessor
         /// </summary>
         public void CloseAll()
         {
-            if (!dbContexts.Any()) return;
+            if (!_dbContexts.Any()) return;
 
-            foreach (var item in dbContexts)
+            foreach (var item in _dbContexts)
             {
                 var conn = item.Value.Database.GetDbConnection();
-                if (conn.State == ConnectionState.Open)
-                {
-                    var wrapConn = InjectMiniProfiler ? new ProfiledDbConnection(conn, MiniProfiler.Current) : conn;
-                    wrapConn.Close();
-                }
+                if (conn.State != ConnectionState.Open) continue;
+
+                conn.Close();
+                // 打印数据库关闭信息
+                App.PrintToMiniProfiler("sql", $"Close", $"Connection Close()");
             }
         }
 
@@ -330,9 +319,10 @@ namespace Furion.DatabaseAccessor
         private void ShareTransaction(DbTransaction transaction)
         {
             // 跳过第一个数据库上下文并设置共享事务
-            _ = dbContexts
-                   .Where(u => u.Value != null && u.Value.Database.CurrentTransaction == null)
-                   .Select(u => u.Value.Database.UseTransaction(transaction));
+            _ = _dbContexts
+                   .Where(u => u.Value != null && ((dynamic)u.Value).UseUnitOfWork == true && u.Value.Database.CurrentTransaction == null)
+                   .Select(u => u.Value.Database.UseTransaction(transaction))
+                   .Count();
         }
     }
 }

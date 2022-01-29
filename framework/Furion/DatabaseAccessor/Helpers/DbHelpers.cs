@@ -1,16 +1,13 @@
-﻿// -----------------------------------------------------------------------------
-// 让 .NET 开发更简单，更通用，更流行。
-// Copyright © 2020-2021 Furion, 百小僧, Baiqian Co.,Ltd.
-//
-// 框架名称：Furion
-// 框架作者：百小僧
-// 框架版本：2.7.9
-// 源码地址：Gitee： https://gitee.com/dotnetchina/Furion
-//          Github：https://github.com/monksoul/Furion
-// 开源协议：Apache-2.0（https://gitee.com/dotnetchina/Furion/blob/master/LICENSE）
-// -----------------------------------------------------------------------------
+﻿// Copyright (c) 2020-2022 百小僧, Baiqian Co.,Ltd.
+// Furion is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan PSL v2. 
+// You may obtain a copy of Mulan PSL v2 at:
+//             https://gitee.com/dotnetchina/Furion/blob/master/LICENSE 
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.  
+// See the Mulan PSL v2 for more details.
 
-using Furion.DependencyInjection;
+using Furion.ClayObject;
+using Furion.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -18,11 +15,10 @@ using System.Data.Common;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using System.Text.RegularExpressions;
+using System.Text.Json;
 
 namespace Furion.DatabaseAccessor
 {
-    [SkipScan]
     internal static class DbHelpers
     {
         /// <summary>
@@ -34,6 +30,12 @@ namespace Furion.DatabaseAccessor
         internal static DbParameter[] ConvertToDbParameters(object model, DbCommand dbCommand)
         {
             var modelType = model?.GetType();
+
+            // 处理 JsonElement 类型
+            if (model is JsonElement jsonElement && jsonElement.ValueKind == JsonValueKind.Object) return ConvertToDbParameters((Dictionary<string, object>)jsonElement.ToObject(), dbCommand);
+
+            // 处理 Clay 类型
+            if (model is Clay clay) return ConvertToDbParameters((Dictionary<string, object>)clay.ToDictionary(), dbCommand);
 
             // 处理字典类型参数
             if (modelType == typeof(Dictionary<string, object>)) return ConvertToDbParameters((Dictionary<string, object>)model, dbCommand);
@@ -62,7 +64,12 @@ namespace Furion.DatabaseAccessor
                 }
 
                 dbParameter.ParameterName = property.Name;
-                dbParameter.Value = propertyValue;
+                dbParameter.Value = propertyValue is JsonElement propertyJsonElement
+                                        && propertyJsonElement.ValueKind != JsonValueKind.Object
+                                        && propertyJsonElement.ValueKind != JsonValueKind.Array
+                                    ? propertyJsonElement.ToObject()
+                                    : propertyValue;    // 解决 object/json 类型值
+
                 dbParameters.Add(dbParameter);
             }
 
@@ -113,11 +120,19 @@ namespace Furion.DatabaseAccessor
             if (dbParameterAttribute.DbType != null)
             {
                 var type = dbParameterAttribute.DbType.GetType();
-                if (type.IsEnum && typeof(DbType).IsAssignableFrom(type))
+                if (type.IsEnum)
                 {
-                    dbParameter.DbType = (DbType)dbParameterAttribute.DbType;
+                    // 处理通用 DbType 类型
+                    if (typeof(DbType).IsAssignableFrom(type)) dbParameter.DbType = (DbType)dbParameterAttribute.DbType;
+
+                    // 解决 Oracle 数据库游标类型参数
+                    if (type.FullName.Equals("Oracle.ManagedDataAccess.Client.OracleDbType", StringComparison.OrdinalIgnoreCase))
+                    {
+                        dbParameter.GetType().GetProperty("OracleDbType")?.SetValue(dbParameter, dbParameterAttribute.DbType);
+                    }
                 }
             }
+
             // 设置大小，解决NVarchar，Varchar 问题
             if (dbParameterAttribute.Size > 0)
             {
@@ -140,28 +155,8 @@ namespace Furion.DatabaseAccessor
             // 检查是否支持函数
             DbProvider.CheckFunctionSupported(providerName, dbFunctionType);
 
-            parameters ??= Array.Empty<DbParameter>();
-
-            var stringBuilder = new StringBuilder();
-            stringBuilder.Append($"SELECT{(dbFunctionType == DbFunctionType.Table ? " * FROM" : "")} {funcName}(");
-
-            // 生成函数参数
-            for (var i = 0; i < parameters.Length; i++)
-            {
-                var sqlParameter = parameters[i];
-
-                // 处理不同数据库的占位符
-                stringBuilder.Append(FixSqlParameterPlaceholder(providerName, sqlParameter.ParameterName));
-
-                // 处理最后一个参数逗号
-                if (i != parameters.Length - 1)
-                {
-                    stringBuilder.Append(", ");
-                }
-            }
-            stringBuilder.Append("); ");
-
-            return stringBuilder.ToString();
+            // 生成数据库表值函数 sql
+            return GenerateDbFunctionSql(providerName, dbFunctionType, funcName, parameters.Select(u => u.ParameterName).ToArray());
         }
 
         /// <summary>
@@ -186,26 +181,8 @@ namespace Furion.DatabaseAccessor
                 ? Array.Empty<PropertyInfo>()
                 : modelType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
-            var stringBuilder = new StringBuilder();
-
-            stringBuilder.Append($"SELECT{(dbFunctionType == DbFunctionType.Table ? " * FROM" : "")} {funcName}(");
-
-            for (var i = 0; i < properities.Length; i++)
-            {
-                var property = properities[i];
-
-                stringBuilder.Append(FixSqlParameterPlaceholder(providerName, property.Name));
-
-                // 处理最后一个参数逗号
-                if (i != properities.Length - 1)
-                {
-                    stringBuilder.Append(", ");
-                }
-            }
-
-            stringBuilder.Append("); ");
-
-            return stringBuilder.ToString();
+            // 生成数据库表值函数 sql
+            return GenerateDbFunctionSql(providerName, dbFunctionType, funcName, properities.Select(u => u.Name).ToArray());
         }
 
         /// <summary>
@@ -305,35 +282,6 @@ namespace Furion.DatabaseAccessor
         }
 
         /// <summary>
-        /// 解析 Sql 配置信息
-        /// </summary>
-        /// <param name="sqlTemplate">sql或sql模板</param>
-        /// <returns></returns>
-        internal static string ResolveSqlConfiguration(string sqlTemplate)
-        {
-            var matches = SqlTemplateRegex.Matches(sqlTemplate);
-            if (!matches.Any()) return sqlTemplate;
-
-            foreach (Match match in matches)
-            {
-                // 获取路径
-                var path = match.Groups["path"].Value;
-
-                // 读取配置
-                var realSql = App.Configuration[path];
-                if (string.IsNullOrWhiteSpace(realSql))
-                {
-                    var sqlConfiguration = App.GetConfig<SqlTemplate>(path) ?? throw new InvalidOperationException($"Not found {path} configuration information.");
-                    realSql = sqlConfiguration.Sql;
-                }
-
-                sqlTemplate = sqlTemplate.Replace($"#({path})", realSql);
-            }
-
-            return sqlTemplate;
-        }
-
-        /// <summary>
         /// 数据没找到异常
         /// </summary>
         /// <returns></returns>
@@ -383,16 +331,35 @@ namespace Furion.DatabaseAccessor
         }
 
         /// <summary>
-        /// Sql 模板正在表达式
+        /// 生存表值函数 sql
         /// </summary>
-        private static readonly Regex SqlTemplateRegex;
-
-        /// <summary>
-        /// 静态构造函数
-        /// </summary>
-        static DbHelpers()
+        /// <param name="providerName"></param>
+        /// <param name="dbFunctionType"></param>
+        /// <param name="funcName"></param>
+        /// <param name="parameterNames"></param>
+        /// <returns></returns>
+        private static string GenerateDbFunctionSql(string providerName, DbFunctionType dbFunctionType, string funcName, string[] parameterNames)
         {
-            SqlTemplateRegex = new Regex(@"\#\((?<path>.*?)\)");
+            var stringBuilder = new StringBuilder();
+
+            stringBuilder.Append($"SELECT{(dbFunctionType == DbFunctionType.Table ? " * FROM" : "")} {funcName}(");
+
+            for (var i = 0; i < parameterNames.Length; i++)
+            {
+                var propertyName = parameterNames[i];
+
+                stringBuilder.Append(FixSqlParameterPlaceholder(providerName, propertyName));
+
+                // 处理最后一个参数逗号
+                if (i != parameterNames.Length - 1)
+                {
+                    stringBuilder.Append(", ");
+                }
+            }
+
+            stringBuilder.Append("); ");
+
+            return stringBuilder.ToString();
         }
     }
 }

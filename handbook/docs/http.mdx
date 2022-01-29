@@ -83,7 +83,7 @@ public interface IHttp : IHttpDispatchProxy
 
 ```cs {9,16}
 using Furion.DynamicApiController;
-using Furion.RemoteRequest;
+using Furion.RemoteRequest.Extensions;
 
 namespace Furion.Application
 {
@@ -120,7 +120,7 @@ var response = await "https://www.furion.pro/patch".PatchAsync();
 var response = await "https://www.furion.pro/head".HeadAsync();
 ```
 
-需引入 `using Furion.RemoteRequest` 命名空间。
+需引入 `using Furion.RemoteRequest.Extensions` 命名空间。
 
   </TabItem>
 </Tabs>
@@ -253,7 +253,16 @@ await "https://www.furion.pro/api/user/add".SetBody(new Dictionary<string , obje
     { "Id", 1 },
     { "Name", "Furion"}
 }, "application/x-www-form-urlencoded");
+
+// 处理 application/xml、text/xml
+await "https://www.furion.pro/api/user/add".SetBody("<SomeDto><SomeTag>somevalue</SomeTag></SomeDto>", "application/xml");
 ```
+
+:::important 特别注意
+
+如果请求 `Content-Type` 设置为 `application/x-www-form-urlencoded` 类型，那么底层自动将数据进行 `UrlEncode` 编码处理，无需外部处理。
+
+:::
 
 ### 19.4.9 设置 `Content-Type`
 
@@ -376,6 +385,7 @@ var str = await "https://www.baidu.com".GetAsStringAsync();
 有时候我们需要上传文件，需要设置 `Content-Type` 为 `multipart/form-data` 类型，如：
 
 ```cs
+// bytes 可以通过 File.ReadAllBytes(文件路径) 获取
 var res = await "https://www.furion.pro/upload".SetBody(new { id =1, name = "Furion"}, "multipart/form-data")
                                                .SetBodyBytes(("键", bytes, "文件名")).PostAsync();
 ```
@@ -387,6 +397,38 @@ var res = await "https://www.furion.pro/upload".SetBody(new { id =1, name = "Fur
 ```cs
 var res = await "https://www.furion.pro/upload".SetRequestScoped(services);
 ```
+
+### 19.4.20 设置 `Timeout` 超时时间
+
+```cs
+var res = await "https://www.furion.pro/upload".SetClientTimeout(10); // 单位秒
+```
+
+### 19.4.21 支持模板配置
+
+模板格式为：`#(配置路径)`
+
+```cs
+var res = await "#(Furion:Address)/upload".GetAsync();
+```
+
+```json
+{
+  "Furion": {
+    "Address": "https://www.furion.pro"
+  }
+}
+```
+
+### 19.4.22 重试策略
+
+在 `Furion v2.18+` 版本支持配置重试策略，如：
+
+```cs
+var res = await "#(Furion:Address)/upload".SetRetryPolicy(3, 1000).GetAsync();
+```
+
+以上代码表示请求失败重试 `3` 次，每次延迟 `1000ms` 。
 
 ## 19.5 `IHttpDispatchProxy` 代理方式
 
@@ -523,6 +565,20 @@ public interface IHttp : IHttpDispatchProxy
 
     [Post("https://www.furion.pro/post"), JsonSerialization(typeof(NewtonsoftJsonSerializerProvider))]
     Task<HttpResponseMessage> PostXXXAsync([Body]User user, [JsonSerializerOptions]object jsonSerializerOptions = default);
+
+    /// <summary>
+    /// 缺省序列化配置
+    /// </summary>
+    /// <returns></returns>
+    [JsonSerializerOptions]
+    static object GetJsonSerializerOptions()
+    {
+        // 这里也可以通过 JSON.GetSerializerOptions<JsonSerializerOptions>() 获取 Startup.cs 中的配置
+        return new JsonSerializerOptions
+        {
+
+        };
+    }
 }
 ```
 
@@ -594,7 +650,7 @@ public interface IHttp : IHttpDispatchProxy
 {
     // 通过参数拦截
     [Post("https://www.furion.pro/post")]
-    Task<HttpResponseMessage> PostXXXAsync([Interceptor(InterceptorTypes.HttpClient)] Action<HttpRequestMessage> action = default);
+    Task<HttpResponseMessage> PostXXXAsync([Interceptor(InterceptorTypes.Client)] Action<HttpRequestMessage> action = default);
 
     // 全局拦截，类中每一个方法都会触发
     [Interceptor(InterceptorTypes.Client)]
@@ -713,11 +769,64 @@ public interface IHttp : IHttpDispatchProxy
 ```cs
 public interface IHttp : IHttpDispatchProxy
 {
-    [Post("https://www.furion.pro/upload")]
+    [Post("https://www.furion.pro/upload")] // bytes 可以通过 File.ReadAllBytes(文件路径) 获取
     Task<HttpRequestMessage> PostXXXAsync([Body("multipart/form-data")]User user, [BodyBytes("键","文件名")]Byte[] bytes);
-    Task<User> PostXXXAsync();
 }
 ```
+
+### 19.5.15 设置 `Timeout` 超时时间
+
+```cs
+[Timeout(1000)]
+public interface IHttp : IHttpDispatchProxy
+{
+    [Post("https://www.furion.pro/upload"), Timeout(500)]   // 单位秒
+    Task<HttpRequestMessage> PostXXXAsync([Body]User user);
+}
+```
+
+### 19.4.20 设置 `Timeout` 超时时间
+
+```cs
+var res = await "https://www.furion.pro/upload".SetClientTimeout(10); // 单位秒
+```
+
+### 19.5.16 支持模板配置
+
+模板格式为：`#(配置路径)`
+
+```cs
+public interface IHttp : IHttpDispatchProxy
+{
+    [Post("#(Furion:Address)/upload")]
+    Task<HttpRequestMessage> PostXXXAsync([Body]User user);
+}
+```
+
+```json
+{
+  "Furion": {
+    "Address": "https://www.furion.pro"
+  }
+}
+```
+
+方法的优先级高于接口定义的优先级。
+
+### 19.5.17 重试策略
+
+在 `Furion v2.18+` 版本支持配置重试策略，如：
+
+```cs
+[RetryPolicy(3, 1000)] // 支持全局
+public interface IHttp : IHttpDispatchProxy
+{
+    [Post("#(Furion:Address)/upload"), RetryPolicy(3, 1000)]    // 支持局部
+    Task<HttpRequestMessage> PostXXXAsync([Body]User user);
+}
+```
+
+以上代码表示请求失败重试 `3` 次，每次延迟 `1000ms` 。
 
 ## 19.6 多个请求客户端配置
 
@@ -740,6 +849,22 @@ services.AddRemoteRequest(options=>
         c.BaseAddress = new Uri("https://api.facebook.com/");
         c.DefaultRequestHeaders.Add("Accept", "application/vnd.facebook.v3+json");
         c.DefaultRequestHeaders.Add("User-Agent", "HttpClientFactory-Sample");
+    });
+
+    // 配置更多参数，比如 SSL 证书
+    services.AddHttpClient("github", c => {
+        // 其他配置
+    })
+    .ConfigurePrimaryHttpMessageHandler(u => new HttpClientHandler
+    {
+        // 忽略 SSL 不安全检查，或 https 不安全或 https 证书有误
+        ServerCertificateCustomValidationCallback = (_, _, _, _) => true,
+        ClientCertificateOptions = ClientCertificateOption.Manual,
+        ClientCertificates = {
+            new X509Certificate2("...","..."),
+            new X509Certificate2("...","..."),
+            new X509Certificate2("...","...")
+        }
     });
 })
 ```
@@ -781,11 +906,55 @@ Task<User> GetData();
 var response = await "http://47.100.247.61/api/sysdata/categories".SetClient("github").PostAsync();
 ```
 
-## 19.7 关于同步请求
+## 19.7 关于返回值非 `200` 时忽略 `Http状态`
+
+`Furion` 提供了非常方便的请求并且序列化请求结果 `PostAsAsync<T>`
+在 `2.8.8` 及以下版本，当返回结果的 `Http` 状态为非 `200` 时，会直接截断。考虑到请求接口的多样性，在 `2.8.9` 及以上版本增加忽略返回 `Http` 状态，直接序列化结果的方式。
+
+```cs
+//请求并且序列化请求结果
+var result = await "https://api.facebook.com/"
+    //如果不加OnException，则会直接截断
+    .OnException((res,errors)=> {
+        //激活异步拦截 此处可以做记录日志操作 也可保持现状
+    })
+    .PostAsAsync<T>();
+```
+
+`PostAsStringAsync()` 也使用同样的 `OnException` 操作使得忽略返回 `Http` 状态,原样返回 `Http` 请求结果
+
+:::important 特别说明
+
+如果不加 `OnException`，则会直接截断。
+如果需要复杂的 `Http Post` 请求，建议直接使用 `PostAsync`,返回值为 `HttpResponseMessage`，可以更灵活的控制结果。
+
+:::
+
+## 19.8 关于同步请求
 
 `Furion` 框架内部默认不提供同步请求操作，建议总是使用异步的方式请求。如在不能使用异步的情况下，可自行转换为同步执行。
 
-## 19.8 反馈与建议
+## 19.9 多线程共享作用域
+
+默认情况下，所有的 `字符串` 和 `实体` 拓展都有自己独立维护的 `ServiceProvider` 作用域。
+
+在 `Web` 请求中，默认是 `HttpContext.RequestServices`，但在 `非 Web`，如多线程操作，后台任务，事件总线等场景下会自动创建新的作用域，实际上这是非常不必要的内存开销。
+
+这时，我们只需要通过 `.SetXXXScoped(service)` 共享当前服务提供器作用域即可，如：
+
+```cs
+Scoped.Create(async (fac, scope) => {
+   var response = await "https://www.furion.pro".SetRequestScoped(scope.ServiceProvider).PostAsync();
+});
+```
+
+## 19.10 静态 `Default` 方式构建
+
+```cs
+await HttpRequestPart.Default.SetRequestUrl("https://www.baidu.com").GetAsStringAsync();
+```
+
+## 19.11 反馈与建议
 
 :::note 与我们交流
 

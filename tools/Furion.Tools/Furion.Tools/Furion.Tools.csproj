@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net5.0</TargetFramework>
+		<OutputType>Exe</OutputType>
+		<Version>2.20.3</Version>
+		<ToolCommandName>furion</ToolCommandName>
+		<Description>Furion 工具链</Description>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Furion.Tools.CommandLine" Version="2.20.3" />
+	</ItemGroup>
+
+</Project>

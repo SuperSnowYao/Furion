@@ -1,16 +1,13 @@
-// -----------------------------------------------------------------------------
-// 让 .NET 开发更简单，更通用，更流行。
-// Copyright © 2020-2021 Furion, 百小僧, Baiqian Co.,Ltd.
-//
-// 框架名称：Furion
-// 框架作者：百小僧
-// 框架版本：2.7.9
-// 源码地址：Gitee： https://gitee.com/dotnetchina/Furion
-//          Github：https://github.com/monksoul/Furion
-// 开源协议：Apache-2.0（https://gitee.com/dotnetchina/Furion/blob/master/LICENSE）
-// -----------------------------------------------------------------------------
+// Copyright (c) 2020-2022 百小僧, Baiqian Co.,Ltd.
+// Furion is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan PSL v2. 
+// You may obtain a copy of Mulan PSL v2 at:
+//             https://gitee.com/dotnetchina/Furion/blob/master/LICENSE 
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.  
+// See the Mulan PSL v2 for more details.
 
 using Furion.DependencyInjection;
+using Furion.Templates.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
@@ -26,7 +23,7 @@ namespace Furion.DatabaseAccessor
     /// <summary>
     /// 数据库提供器选项
     /// </summary>
-    [SkipScan]
+    [SuppressSniffer]
     public static class DbProvider
     {
         /// <summary>
@@ -95,11 +92,6 @@ namespace Furion.DatabaseAccessor
         internal static readonly string[] NotSupportTableFunctionDatabases;
 
         /// <summary>
-        /// 不支持环境事务的数据库
-        /// </summary>
-        internal static readonly string[] NotSupportTransactionScopeDatabase;
-
-        /// <summary>
         /// 构造函数
         /// </summary>
         static DbProvider()
@@ -128,12 +120,6 @@ namespace Furion.DatabaseAccessor
                 Dm
             };
 
-            NotSupportTransactionScopeDatabase = new[]
-            {
-                Sqlite,
-                InMemoryDatabase
-            };
-
             DbContextAppDbContextAttributes = new ConcurrentDictionary<Type, AppDbContextAttribute>();
         }
 
@@ -152,34 +138,37 @@ namespace Furion.DatabaseAccessor
         /// 获取数据库上下文连接字符串
         /// </summary>
         /// <typeparam name="TDbContext"></typeparam>
-        /// <param name="connectionString"></param>
+        /// <param name="connectionMetadata">支持数据库连接字符串，配置文件的 ConnectionStrings 中的Key或 配置文件的完整的配置路径，如果是内存数据库，则为数据库名称</param>
         /// <returns></returns>
-        public static string GetConnectionString<TDbContext>(string connectionString = default)
+        public static string GetConnectionString<TDbContext>(string connectionMetadata = default)
             where TDbContext : DbContext
         {
-            if (!string.IsNullOrWhiteSpace(connectionString)) return connectionString;
+            // 支持读取配置渲染
+            var realConnectionString = connectionMetadata.Render();
+
+            if (!string.IsNullOrWhiteSpace(realConnectionString)) return realConnectionString;
 
             // 如果没有配置数据库连接字符串，那么查找特性
             var dbContextAttribute = GetAppDbContextAttribute(typeof(TDbContext));
             if (dbContextAttribute == null) return default;
 
-            // 获取特性连接字符串
-            var connStr = dbContextAttribute.ConnectionString;
+            // 获取特性连接字符串（渲染配置模板）
+            var connStr = dbContextAttribute.ConnectionMetadata.Render();
 
             if (string.IsNullOrWhiteSpace(connStr)) return default;
             // 如果包含 = 符号，那么认为是连接字符串
-            if (connStr.Contains("=")) return connStr;
+            if (connStr.Contains('=')) return connStr;
             else
             {
                 var configuration = App.Configuration;
 
                 // 如果包含 : 符号，那么认为是一个 Key 路径
-                if (connStr.Contains(":")) return configuration[connStr];
+                if (connStr.Contains(':')) return configuration[connStr];
                 else
                 {
                     // 首先查找 DbConnectionString 键，如果没有找到，则当成 Key 去查找
                     var connStrValue = configuration.GetConnectionString(connStr);
-                    return !string.IsNullOrWhiteSpace(connStrValue) ? connStrValue : configuration[connStr];
+                    return (!string.IsNullOrWhiteSpace(connStrValue) ? connStrValue : configuration[connStr]) ?? connStr;
                 }
             }
         }

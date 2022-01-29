@@ -7,20 +7,9 @@ export default function StarProject() {
 
   return (
     <div className="furion-star-project">
-      <button className="furion-star-close" onClick={() => setShow(false)}>
-        关闭
-      </button>
-      {show ? (
-        <a
-          href="https://gitee.com/dotnetchina#-%E6%AF%8F%E5%91%A8%E7%B2%BE%E9%80%89%E9%A1%B9%E7%9B%AE-"
-          target="_blank"
-          title="dotNET China 精选项目第 09 期"
-        >
-          <img src={useBaseUrl("img/HandyControl.png")} />
-        </a>
-      ) : (
-        <></>
-      )}
+      <a href="https://gitee.com/monksoul" target="_blank">
+        <img src={useBaseUrl("img/icon.png")} title="点击了解百小僧" />
+      </a>
     </div>
   );
 }

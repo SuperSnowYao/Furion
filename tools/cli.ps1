@@ -24,7 +24,7 @@ Param(
     #[string]$UseDatabaseNames
 )
 
-$FurTools = "Furion Tools v2.7.8";
+$FurTools = "Furion Tools v2.20.7";
 
 # 输出信息
 $copyright = @"
@@ -36,15 +36,6 @@ $copyright = @"
 // | |  | |_| | |  | | (_) | | | |    | | (_) | (_) | \__ \
 // |_|   \__,_|_|  |_|\___/|_| |_|    |_|\___/ \___/|_|___/
 //                                                         
-// // --------------------------------------------------------------------------
-// 让 .NET 开发更简单，更通用，更流行。
-// Copyright © 2020 Furion, Baiqian Co.,Ltd.
-//
-// 框架名称：Furion
-// 框架作者：百小僧
-// 框架版本：v2.7.8
-// 源码地址：https://gitee.com/dotnetchina/Furion
-// 开源协议：Apache-2.0（http://www.apache.org/licenses/LICENSE-2.0）
 // -----------------------------------------------------------------------------
 "@;
 
@@ -218,7 +209,7 @@ if($options -eq "G")
 
     # 创建一个 Winform 窗口
     $mainForm = New-Object System.Windows.Forms.Form;
-    $mainForm.Text = "Furion Tools v1.0.0";
+    $mainForm.Text = $FurTools;
     $mainForm.Size = New-Object System.Drawing.Size(800,600);
     $mainForm.StartPosition = "CenterScreen";
 
@@ -538,7 +529,7 @@ namespace $CoreProject
 "@;
     
     # 写入文件
-    $finalClass | Set-Content $filePath;
+    Set-Content -Path $filePath -Value $finalClass -Encoding utf8;
 
     # 打印生成后代码
     Write-Output "$FurTools 成功生成 $fileName.cs 实体代码";

@@ -37,7 +37,6 @@ namespace Furion.Core
         public Person()
         {
             CreatedTime = DateTime.Now;
-            IsDeleted = false;
         }
 
         /// <summary>
@@ -124,7 +123,7 @@ namespace Furion.Core
         public Children()
         {
             CreatedTime = DateTime.Now;
-            IsDeleted = false;
+          
         }
 
         /// <summary>
@@ -169,7 +168,7 @@ namespace Furion.Core
         public Post()
         {
             CreatedTime = DateTime.Now;
-            IsDeleted = false;
+          
         }
 
         /// <summary>
@@ -213,7 +212,7 @@ var person = repository.Include(!string.IsNullOrEmpty(keyword), u => u.Detail);
 
 // 示例六
 var person = repository.Include(!string.IsNullOrEmpty(keyword), u => u.Detail)
-                       .Include(age > 18), u => u.Detail.Where(d => d.Id > 10).OrderBy(d => d.Name))
+                       .Include(age > 18, u => u.Detail.Where(d => d.Id > 10).OrderBy(d => d.Name))
                             .ThenInclude(d => d.Review)
                        .Include(u => u.Post);
 ```
@@ -312,7 +311,7 @@ var query = from student in repository.AsQueryable()
 var query = from a in repository.AsQueryable()
             join b in repository2.AsQueryable() on a.Id equals b.Aid
             join c in repository3.AsQueryable() on c.id equals b.Bid
-            group emp by new { emp.Age, emp.Sex } into g
+            group a by new { a.Age, b.Sex } into g
             select new {
                 Peo = g.Key,
                 Count = g.Count()
@@ -397,7 +396,7 @@ namespace Furion.Core
         public City()
         {
             CreatedTime = DateTime.Now;
-            IsDeleted = false;
+           
         }
 
         /// <summary>
@@ -467,7 +466,7 @@ namespace Furion.Application.Persons
     public class CityDto
     {
         /// <summary>
-        /// 逐渐
+        /// 主键
         /// </summary>
         public int Id { get; set; }
 
@@ -541,6 +540,12 @@ var e = DynamicExpressionParser.ParseLambda(
 
 ## 9.11.11 时态查询
 
+:::warning 功能移除声明
+
+以下内容在 `Furion 2.13 +` 版本中已移除。
+
+:::
+
 `Furion` 框架还提供了时态查询功能，可以查询特定时间的数据，如：
 
 ```cs
@@ -565,7 +570,7 @@ var result = rep.Entities
 `Furion` 框架提供了以下高性能实体集合：
 
 - `DetachedEntities`：脱轨/不追踪实体
-- `AsQueryable()`：不追踪实体
+- `AsQueryable(false)`：不追踪实体
 - `Entities.AsNoTracking()`：手动关闭实体追踪
 
 在 `EF Core` 中，复杂查询总是会生成一个 `sql`，也就是 `AsSingleQuery()`，我们也可以设置为 `AsSplitQuery()` 切割成多个查询。
@@ -591,7 +596,7 @@ namespace Furion.Core
         /// <param name="entityBuilder"></param>
         /// <param name="dbContext"></param>
         /// <param name="dbContextLocator"></param>
-        public void Configure(EntityTypeBuilder<City> entityBuilder, DbContext dbContext, Type dbContextLocator)
+        public void Configure(EntityTypeBuilder<Person> entityBuilder, DbContext dbContext, Type dbContextLocator)
         {
             entityBuilder.ToSqlQuery(
               @"select * from dbo.person.2020-09-19

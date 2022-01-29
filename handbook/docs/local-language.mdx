@@ -50,20 +50,9 @@ public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
 
 ## 21.3 如何使用
 
-### 21.3.1 创建 `Lang.cs` 类
+### 21.3.1 配置 `LocalizationSettings`
 
-`Furion` 框架采用一种比较特殊的方式动态注入多语言机制，所以必须遵守一个约定，那就是**必须在 `Web启动项目层` 根目录下添加 `Lang.cs` 空类**，也就是和 `Startup.cs` 和 `Progame.cs` 同级。
-
-```cs title="Furion.Web.Entry\Lang.cs"
-namespace Furion.Web.Entry
-{
-    public class Lang { }
-}
-```
-
-### 21.3.2 配置 `LocalizationSettings`
-
-创建 `Lang.cs` 空类之后，添加 `LocalizationSettings` 配置选项：
+添加 `LocalizationSettings` 配置选项：
 
 ```json {2,3}
 {
@@ -74,9 +63,9 @@ namespace Furion.Web.Entry
 }
 ```
 
-### 21.3.3 创建 `Resources` 文件夹
+### 21.3.2 创建 `Resources` 文件夹
 
-接下来在 **`Web启动项目层` 添加 `Resources` 文件夹**，如图：
+接下来在 `Web启动项目层` 添加 `Resources` 文件夹，如图：（**可配置放置任意层，见配置 `AssemblyName`**）
 
 <img src={useBaseUrl("img/lang1.png")} />
 
@@ -172,6 +161,23 @@ L.Text["没找到"];   // => 如果设置为英文，但是没有文件，则直
 
 接下来，只需要把对应语言版本的键值对填写即可。
 
+:::tip 自定义资源文件名或存放程序集
+
+默认情况下，资源文件名必须以 `Lang` 开头，且只能放在启动层，如果需要自定义，添加配置文件即可
+
+```json
+{
+  "LocalizationSettings": {
+    "LanguageFilePrefix": "MyLang"
+    // "AssemblyName": "你的其他层程序集名称"
+  }
+}
+```
+
+之后，就可以：`MyLang.区域码.resx`。
+
+:::
+
 ## 21.7 切换语言
 
 `Furion` 提供了三种语言切换方式进行切换语言：
@@ -211,7 +217,7 @@ L.SetCulture("en-US");  // en-US 也可以通过前端传递过来，这样就�
 
      public TestController(IStringLocalizerFactory factory)
      {
-         _localizer = factory.Create(L.LangType);
+         _localizer = factory.Create();
      }
 
      public IActionResult About()
@@ -227,6 +233,8 @@ L.SetCulture("en-US");  // en-US 也可以通过前端传递过来，这样就�
   - `ResourcesPath`：资源目录，`string` 类型，默认 `Resources`
   - `SupportedCultures`：支持的语言区域码类别，`string[]` 类型
   - `DefaultCulture`：默认语言区域码，如果为空，则取 `SupportedCultures` 第一项
+  - `LanguageFilePrefix`：配置资源文件前缀，`string` 类型，默认 `Lang`
+  - `AssemblyName`：配置资源文件存放程序集名，`string` 类型，默认 `启动层` 名称
 
 ## 21.10 区域码列表
 

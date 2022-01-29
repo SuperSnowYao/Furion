@@ -1,14 +1,10 @@
-// -----------------------------------------------------------------------------
-// 让 .NET 开发更简单，更通用，更流行。
-// Copyright © 2020-2021 Furion, 百小僧, Baiqian Co.,Ltd.
-//
-// 框架名称：Furion
-// 框架作者：百小僧
-// 框架版本：2.7.9
-// 源码地址：Gitee： https://gitee.com/dotnetchina/Furion
-//          Github：https://github.com/monksoul/Furion
-// 开源协议：Apache-2.0（https://gitee.com/dotnetchina/Furion/blob/master/LICENSE）
-// -----------------------------------------------------------------------------
+// Copyright (c) 2020-2022 百小僧, Baiqian Co.,Ltd.
+// Furion is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan PSL v2. 
+// You may obtain a copy of Mulan PSL v2 at:
+//             https://gitee.com/dotnetchina/Furion/blob/master/LICENSE 
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.  
+// See the Mulan PSL v2 for more details.
 
 using Furion.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
@@ -31,7 +27,7 @@ namespace Furion.DatabaseAccessor
     /// <summary>
     /// 非泛型EF Core仓储实现
     /// </summary>
-    [SkipScan]
+    [SuppressSniffer]
     public partial class EFCoreRepository : IRepository
     {
         /// <summary>
@@ -76,25 +72,39 @@ namespace Furion.DatabaseAccessor
         /// <summary>
         /// 重新构建并切换仓储
         /// </summary>
+        /// <remarks>特别注意，Scoped 必须手动释放</remarks>
         /// <typeparam name="TEntity">实体类型</typeparam>
         /// <returns>仓储</returns>
-        public virtual IRepository<TEntity> BuildChange<TEntity>()
+        public virtual (IRepository<TEntity> Repository, IServiceScope Scoped) BuildChange<TEntity>()
             where TEntity : class, IPrivateEntity, new()
         {
-            return _serviceProvider.CreateScope().ServiceProvider.GetService<IRepository<TEntity>>();
+            var scoped = _serviceProvider.CreateScope();
+            var repository = scoped.ServiceProvider.GetService<IRepository<TEntity>>();
+
+            // 添加未托管对象
+            App.UnmanagedObjects.Add(scoped);
+
+            return (repository, scoped);
         }
 
         /// <summary>
         /// 重新构建并切换多数据库上下文仓储
         /// </summary>
+        /// <remarks>特别注意，Scoped 必须手动释放</remarks>
         /// <typeparam name="TEntity">实体类型</typeparam>
         /// <typeparam name="TDbContextLocator">数据库上下文定位器</typeparam>
         /// <returns>仓储</returns>
-        public virtual IRepository<TEntity, TDbContextLocator> BuildChange<TEntity, TDbContextLocator>()
+        public virtual (IRepository<TEntity, TDbContextLocator> Repository, IServiceScope Scoped) BuildChange<TEntity, TDbContextLocator>()
             where TEntity : class, IPrivateEntity, new()
             where TDbContextLocator : class, IDbContextLocator
         {
-            return _serviceProvider.CreateScope().ServiceProvider.GetService<IRepository<TEntity, TDbContextLocator>>();
+            var scoped = _serviceProvider.CreateScope();
+            var repository = scoped.ServiceProvider.GetService<IRepository<TEntity, TDbContextLocator>>();
+
+            // 添加未托管对象
+            App.UnmanagedObjects.Add(scoped);
+
+            return (repository, scoped);
         }
 
         /// <summary>
@@ -141,7 +151,7 @@ namespace Furion.DatabaseAccessor
     /// EF Core仓储实现
     /// </summary>
     /// <typeparam name="TEntity">实体类型</typeparam>
-    [SkipScan]
+    [SuppressSniffer]
     public partial class EFCoreRepository<TEntity> : EFCoreRepository<TEntity, MasterDbContextLocator>
         , IRepository<TEntity>
         where TEntity : class, IPrivateEntity, new()
@@ -158,7 +168,7 @@ namespace Furion.DatabaseAccessor
     /// <summary>
     /// 多数据库上下文仓储
     /// </summary>
-    [SkipScan]
+    [SuppressSniffer]
     public partial class EFCoreRepository<TEntity, TDbContextLocator> : PrivateRepository<TEntity>
         , IRepository<TEntity, TDbContextLocator>
         where TEntity : class, IPrivateEntity, new()
@@ -200,15 +210,16 @@ namespace Furion.DatabaseAccessor
             // 初始化服务提供器
             ServiceProvider = serviceProvider;
 
-            DbConnection = Database.GetDbConnection();
+            // 设置提供器名称
+            ProviderName = Database.ProviderName;
+
+            // 只有关系型数据库才有连接信息
+            if (Database.IsRelational()) DbConnection = Database.GetDbConnection();
             ChangeTracker = Context.ChangeTracker;
             Model = Context.Model;
 
             // 内置多租户
             Tenant = DynamicContext.Tenant;
-
-            // 设置提供器名称
-            ProviderName = Database.ProviderName;
 
             //初始化实体
             Entities = Context.Set<TEntity>();
@@ -406,6 +417,40 @@ namespace Furion.DatabaseAccessor
         }
 
         /// <summary>
+        /// 检查实体跟踪状态
+        /// </summary>
+        /// <param name="id"></param>
+        /// <param name="entityEntry"></param>
+        /// <param name="keyName"></param>
+        /// <returns></returns>
+        public virtual bool CheckTrackState(object id, out EntityEntry entityEntry, string keyName = default)
+        {
+            return CheckTrackState<TEntity>(id, out entityEntry, keyName);
+        }
+
+        /// <summary>
+        /// 检查实体跟踪状态
+        /// </summary>
+        /// <typeparam name="TTrackEntity"></typeparam>
+        /// <param name="id"></param>
+        /// <param name="entityEntry"></param>
+        /// <param name="keyName"></param>
+        /// <returns></returns>
+        public virtual bool CheckTrackState<TTrackEntity>(object id, out EntityEntry entityEntry, string keyName = default)
+            where TTrackEntity : class, IPrivateEntity, new()
+        {
+            // 获取主键名
+            keyName ??= (typeof(TTrackEntity) == typeof(TEntity) ? EntityType : Context.Set<TTrackEntity>().EntityType)
+                        .FindPrimaryKey()?.Properties?.AsEnumerable()?.FirstOrDefault()?.PropertyInfo?.Name;
+
+            // 检查是否已经跟踪
+            entityEntry = ChangeTracker.Entries().FirstOrDefault(u => u.Entity.GetType() == typeof(TTrackEntity)
+                                             && u.CurrentValues[keyName].ToString().Equals(id.ToString()));
+
+            return entityEntry != null;
+        }
+
+        /// <summary>
         /// 判断是否被附加
         /// </summary>
         /// <param name="entity">实体</param>
@@ -503,7 +548,7 @@ namespace Furion.DatabaseAccessor
         /// 获取所有数据库上下文
         /// </summary>
         /// <returns>ConcurrentBag{DbContext}</returns>
-        public ConcurrentDictionary<Guid, DbContext> GetDbContexts()
+        public virtual ConcurrentDictionary<Guid, DbContext> GetDbContexts()
         {
             return _dbContextPool.GetDbContexts();
         }
@@ -716,9 +761,10 @@ namespace Furion.DatabaseAccessor
         /// <summary>
         /// 重新构建并切换仓储
         /// </summary>
+        /// <remarks>特别注意，Scoped 必须手动释放</remarks>
         /// <typeparam name="TChangeEntity">实体类型</typeparam>
         /// <returns>仓储</returns>
-        public virtual IRepository<TChangeEntity> BuildChange<TChangeEntity>()
+        public virtual (IRepository<TChangeEntity> Repository, IServiceScope Scoped) BuildChange<TChangeEntity>()
             where TChangeEntity : class, IPrivateEntity, new()
         {
             return _repository.BuildChange<TChangeEntity>();
@@ -727,10 +773,11 @@ namespace Furion.DatabaseAccessor
         /// <summary>
         /// 重新构建并切换多数据库上下文仓储
         /// </summary>
+        /// <remarks>特别注意，Scoped 必须手动释放</remarks>
         /// <typeparam name="TChangeEntity">实体类型</typeparam>
         /// <typeparam name="TChangeDbContextLocator">数据库上下文定位器</typeparam>
         /// <returns>仓储</returns>
-        public virtual IRepository<TChangeEntity, TChangeDbContextLocator> BuildChange<TChangeEntity, TChangeDbContextLocator>()
+        public virtual (IRepository<TChangeEntity, TChangeDbContextLocator> Repository, IServiceScope Scoped) BuildChange<TChangeEntity, TChangeDbContextLocator>()
             where TChangeEntity : class, IPrivateEntity, new()
             where TChangeDbContextLocator : class, IDbContextLocator
         {

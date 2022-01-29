@@ -1,21 +1,16 @@
-﻿// -----------------------------------------------------------------------------
-// 让 .NET 开发更简单，更通用，更流行。
-// Copyright © 2020-2021 Furion, 百小僧, Baiqian Co.,Ltd.
-//
-// 框架名称：Furion
-// 框架作者：百小僧
-// 框架版本：2.7.9
-// 源码地址：Gitee： https://gitee.com/dotnetchina/Furion
-//          Github：https://github.com/monksoul/Furion
-// 开源协议：Apache-2.0（https://gitee.com/dotnetchina/Furion/blob/master/LICENSE）
-// -----------------------------------------------------------------------------
+﻿// Copyright (c) 2020-2022 百小僧, Baiqian Co.,Ltd.
+// Furion is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan PSL v2. 
+// You may obtain a copy of Mulan PSL v2 at:
+//             https://gitee.com/dotnetchina/Furion/blob/master/LICENSE 
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.  
+// See the Mulan PSL v2 for more details.
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -319,164 +314,6 @@ namespace Furion.DatabaseAccessor
         }
 
         /// <summary>
-        /// 假删除
-        /// </summary>
-        /// <param name="entity">实体</param>
-        /// <returns></returns>
-        public virtual EntityEntry<TEntity> FakeDelete(TEntity entity)
-        {
-            var fakeDeleteProperty = SetFakePropertyValue(entity);
-            return UpdateInclude(entity, new[] { fakeDeleteProperty.Name });
-        }
-
-        /// <summary>
-        /// 假删除
-        /// </summary>
-        /// <param name="entity">实体</param>
-        /// <returns></returns>
-        public virtual Task<EntityEntry<TEntity>> FakeDeleteAsync(TEntity entity)
-        {
-            var fakeDeleteProperty = SetFakePropertyValue(entity);
-            return UpdateIncludeAsync(entity, new[] { fakeDeleteProperty.Name });
-        }
-
-        /// <summary>
-        /// 假删除并立即提交
-        /// </summary>
-        /// <param name="entity">实体</param>
-        /// <returns></returns>
-        public virtual EntityEntry<TEntity> FakeDeleteNow(TEntity entity)
-        {
-            var fakeDeleteProperty = SetFakePropertyValue(entity);
-            return UpdateIncludeNow(entity, new[] { fakeDeleteProperty.Name });
-        }
-
-        /// <summary>
-        /// 假删除并立即提交
-        /// </summary>
-        /// <param name="entity">实体</param>
-        /// <param name="acceptAllChangesOnSuccess">接受所有更改</param>
-        /// <returns></returns>
-        public virtual EntityEntry<TEntity> FakeDeleteNow(TEntity entity, bool acceptAllChangesOnSuccess)
-        {
-            var fakeDeleteProperty = SetFakePropertyValue(entity);
-            return UpdateIncludeNow(entity, new[] { fakeDeleteProperty.Name }, acceptAllChangesOnSuccess);
-        }
-
-        /// <summary>
-        /// 假删除并立即提交
-        /// </summary>
-        /// <param name="entity">实体</param>
-        /// <param name="cancellationToken">异步取消令牌</param>
-        /// <returns></returns>
-        public virtual Task<EntityEntry<TEntity>> FakeDeleteNowAsync(TEntity entity, CancellationToken cancellationToken = default)
-        {
-            var fakeDeleteProperty = SetFakePropertyValue(entity);
-            return UpdateIncludeNowAsync(entity, new[] { fakeDeleteProperty.Name }, null, cancellationToken);
-        }
-
-        /// <summary>
-        /// 假删除并立即提交
-        /// </summary>
-        /// <param name="entity">实体</param>
-        /// <param name="acceptAllChangesOnSuccess">接受所有更改</param>
-        /// <param name="cancellationToken">异步取消令牌</param>
-        /// <returns></returns>
-        public virtual Task<EntityEntry<TEntity>> FakeDeleteNowAsync(TEntity entity, bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
-        {
-            var fakeDeleteProperty = SetFakePropertyValue(entity);
-            return UpdateIncludeNowAsync(entity, new[] { fakeDeleteProperty.Name }, acceptAllChangesOnSuccess, cancellationToken);
-        }
-
-        /// <summary>
-        /// 假删除
-        /// </summary>
-        /// <param name="key">主键</param>
-        /// <returns></returns>
-        public virtual EntityEntry<TEntity> FakeDelete(object key)
-        {
-            var deletedEntity = BuildDeletedEntity(key, false);
-            if (deletedEntity == null) return default;
-
-            var fakeDeleteProperty = SetFakePropertyValue(deletedEntity);
-            return UpdateInclude(deletedEntity, new[] { fakeDeleteProperty.Name });
-        }
-
-        /// <summary>
-        /// 假删除
-        /// </summary>
-        /// <param name="key">主键</param>
-        /// <returns></returns>
-        public virtual Task<EntityEntry<TEntity>> FakeDeleteAsync(object key)
-        {
-            var deletedEntity = BuildDeletedEntity(key, false);
-            if (deletedEntity == null) return default;
-
-            var fakeDeleteProperty = SetFakePropertyValue(deletedEntity);
-            return UpdateIncludeAsync(deletedEntity, new[] { fakeDeleteProperty.Name });
-        }
-
-        /// <summary>
-        /// 假删除并立即提交
-        /// </summary>
-        /// <param name="key">键</param>
-        /// <returns></returns>
-        public virtual EntityEntry<TEntity> FakeDeleteNow(object key)
-        {
-            var deletedEntity = BuildDeletedEntity(key, false);
-            if (deletedEntity == null) return default;
-
-            var fakeDeleteProperty = SetFakePropertyValue(deletedEntity);
-            return UpdateIncludeNow(deletedEntity, new[] { fakeDeleteProperty.Name });
-        }
-
-        /// <summary>
-        /// 假删除并立即提交
-        /// </summary>
-        /// <param name="key">键</param>
-        /// <param name="acceptAllChangesOnSuccess">接受所有更改</param>
-        /// <returns></returns>
-        public virtual EntityEntry<TEntity> FakeDeleteNow(object key, bool acceptAllChangesOnSuccess)
-        {
-            var deletedEntity = BuildDeletedEntity(key, false);
-            if (deletedEntity == null) return default;
-
-            var fakeDeleteProperty = SetFakePropertyValue(deletedEntity);
-            return UpdateIncludeNow(deletedEntity, new[] { fakeDeleteProperty.Name }, acceptAllChangesOnSuccess);
-        }
-
-        /// <summary>
-        /// 假删除并立即提交
-        /// </summary>
-        /// <param name="key">键</param>
-        /// <param name="cancellationToken">异步取消令牌</param>
-        /// <returns></returns>
-        public virtual Task<EntityEntry<TEntity>> FakeDeleteNowAsync(object key, CancellationToken cancellationToken = default)
-        {
-            var deletedEntity = BuildDeletedEntity(key, false);
-            if (deletedEntity == null) return default;
-
-            var fakeDeleteProperty = SetFakePropertyValue(deletedEntity);
-            return UpdateIncludeNowAsync(deletedEntity, new[] { fakeDeleteProperty.Name }, null, cancellationToken);
-        }
-
-        /// <summary>
-        /// 假删除并立即提交
-        /// </summary>
-        /// <param name="key">键</param>
-        /// <param name="acceptAllChangesOnSuccess">接受所有更改</param>
-        /// <param name="cancellationToken">异步取消令牌</param>
-        /// <returns></returns>
-        public virtual Task<EntityEntry<TEntity>> FakeDeleteNowAsync(object key, bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
-        {
-            var deletedEntity = BuildDeletedEntity(key, false);
-            if (deletedEntity == null) return default;
-
-            var fakeDeleteProperty = SetFakePropertyValue(deletedEntity);
-            return UpdateIncludeNowAsync(deletedEntity, new[] { fakeDeleteProperty.Name }, acceptAllChangesOnSuccess, cancellationToken);
-        }
-
-        /// <summary>
         /// 构建被删除的实体
         /// </summary>
         /// <param name="key">主键</param>
@@ -488,39 +325,24 @@ namespace Furion.DatabaseAccessor
             var keyProperty = EntityType.FindPrimaryKey().Properties.AsEnumerable().FirstOrDefault()?.PropertyInfo;
             if (keyProperty == null) return default;
 
-            // 创建实体对象并设置主键值
+            // 判断当前主键是否被跟踪了
+            var tracking = CheckTrackState(key, out var entityEntry, keyProperty.Name);
+            if (tracking)
+            {
+                // 设置实体状态为已删除
+                if (isRealDelete) ChangeEntityState(entityEntry, EntityState.Deleted);
+
+                return entityEntry.Entity as TEntity;
+            }
+
+            // 如果没有被跟踪，创建实体对象并设置主键值
             var entity = Activator.CreateInstance<TEntity>();
             keyProperty.SetValue(entity, key);
 
-            if (isRealDelete)
-            {
-                // 设置实体状态为已删除
-                ChangeEntityState(entity, EntityState.Deleted);
-            }
+            // 设置实体状态为已删除
+            if (isRealDelete) ChangeEntityState(entity, EntityState.Deleted);
 
             return entity;
-        }
-
-        /// <summary>
-        /// 获取假删除的属性信息
-        /// </summary>
-        /// <returns></returns>
-        private PropertyInfo SetFakePropertyValue(TEntity entity)
-        {
-            // 查找加删除特性
-            var fakeDeleteProperty = EntityType.ClrType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                    .FirstOrDefault(u => u.IsDefined(typeof(FakeDeleteAttribute), true));
-
-            if (fakeDeleteProperty == null) throw new InvalidOperationException("No attributes marked as fake deleted were found");
-
-            // 读取假删除的名和属性
-            var fakeDeleteAttribute = fakeDeleteProperty.GetCustomAttribute<FakeDeleteAttribute>(true);
-            var state = fakeDeleteAttribute.State;
-
-            // 设置属性值
-            fakeDeleteProperty.SetValue(entity, state);
-
-            return fakeDeleteProperty;
         }
     }
 }
